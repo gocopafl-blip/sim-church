@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sim Church</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div id="game-container">
+        <!-- Header -->
+        <header id="game-header">
+            <h1 class="game-title">Sim Church</h1>
+            <div class="header-info">
+                <span id="week-display">Week 1</span>
+                <span class="separator">•</span>
+                <span id="church-name">Grace Community Church</span>
+            </div>
+            <div class="header-controls">
+                <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Main Stats Bar -->
+        <section id="stats-bar">
+            <div class="stat-card" data-stat="attendance">
+                <div class="stat-icon">📊</div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-attendance">50</span>
+                    <span class="stat-label">Attendance</span>
+                </div>
+                <div class="stat-trend" id="trend-attendance"></div>
+            </div>
+            <div class="stat-card" data-stat="budget">
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-budget">$5,000</span>
+                    <span class="stat-label">Budget</span>
+                </div>
+                <div class="stat-trend" id="trend-budget"></div>
+            </div>
+            <div class="stat-card" data-stat="reputation">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-content">
+                    <span class="stat-value" id="stat-reputation">50</span>
+                    <span class="stat-label">Reputation</span>
+                </div>
+                <div class="stat-trend" id="trend-reputation"></div>
+            </div>
+        </section>
+
+        <!-- Main Content Area -->
+        <main id="main-content">
+            <!-- Church Visual Area -->
+            <section id="church-view">
+                <div class="church-scene">
+                    <!-- Sky and background -->
+                    <div class="scene-sky">
+                        <div class="cloud cloud-1"></div>
+                        <div class="cloud cloud-2"></div>
+                        <div class="cloud cloud-3"></div>
+                    </div>
+
+                    <!-- Church building -->
+                    <div class="church-building" id="church-building">
+                        <!-- Steeple -->
+                        <div class="steeple">
+                            <div class="cross"></div>
+                            <div class="steeple-roof"></div>
+                        </div>
+
+                        <!-- Main building -->
+                        <div class="main-building">
+                            <div class="roof"></div>
+                            <div class="facade">
+                                <div class="window window-left"></div>
+                                <div class="main-door">
+                                    <div class="door-frame"></div>
+                                </div>
+                                <div class="window window-right"></div>
+                            </div>
+                        </div>
+
+                        <!-- Side wings (appear at higher attendance) -->
+                        <div class="wing wing-left hidden" id="wing-left">
+                            <div class="wing-roof"></div>
+                            <div class="wing-body">
+                                <div class="wing-window"></div>
+                            </div>
+                        </div>
+                        <div class="wing wing-right hidden" id="wing-right">
+                            <div class="wing-roof"></div>
+                            <div class="wing-body">
+                                <div class="wing-window"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ground and decorations -->
+                    <div class="scene-ground">
+                        <div class="path"></div>
+                        <div class="bush bush-1"></div>
+                        <div class="bush bush-2"></div>
+                    </div>
+
+                    <!-- People indicators -->
+                    <div class="people-indicators" id="people-indicators">
+                        <!-- People dots will be added dynamically -->
+                    </div>
+                </div>
+
+                <p class="building-status" id="building-status">Your church is getting started...</p>
+            </section>
+
+            <!-- Quick Actions Panel -->
+            <aside id="actions-panel">
+                <h2 class="panel-title">Actions</h2>
+                <nav class="action-buttons">
+                    <button class="action-btn" id="btn-staff">
+                        <span class="btn-icon">👔</span>
+                        <span class="btn-text">Staff</span>
+                    </button>
+                    <button class="action-btn" id="btn-congregation">
+                        <span class="btn-icon">👥</span>
+                        <span class="btn-text">People</span>
+                    </button>
+                    <button class="action-btn" id="btn-budget">
+                        <span class="btn-icon">💵</span>
+                        <span class="btn-text">Budget</span>
+                    </button>
+                    <button class="action-btn" id="btn-policies">
+                        <span class="btn-icon">📜</span>
+                        <span class="btn-text">Policies</span>
+                    </button>
+                    <button class="action-btn" id="btn-stats">
+                        <span class="btn-icon">📈</span>
+                        <span class="btn-text">Statistics</span>
+                    </button>
+                </nav>
+            </aside>
+        </main>
+
+        <!-- News/Events Ticker -->
+        <section id="news-ticker">
+            <div class="ticker-icon">📰</div>
+            <div class="ticker-content">
+                <p id="news-text">Welcome, Pastor! Your journey begins here. Click "Next Week" to advance time.</p>
+            </div>
+        </section>
+
+        <!-- Game Controls -->
+        <footer id="game-controls">
+            <div class="controls-left">
+                <div class="speed-controls">
+                    <span class="speed-label">Speed:</span>
+                    <button class="speed-btn active" data-speed="1">1x</button>
+                    <button class="speed-btn" data-speed="2">2x</button>
+                    <button class="speed-btn" data-speed="3">3x</button>
+                </div>
+            </div>
+            <div class="controls-center">
+                <button id="btn-next-week" class="primary-btn">
+                    <span class="btn-text">Next Week</span>
+                    <span class="btn-icon">▶️</span>
+                </button>
+            </div>
+            <div class="controls-right">
+                <button id="btn-save" class="secondary-btn">💾 Save</button>
+                <button id="btn-load" class="secondary-btn">📂 Load</button>
+                <button id="btn-exit" class="secondary-btn exit-btn">🚪 Exit</button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Statistics Modal -->
+    <div id="stats-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content stats-modal-content">
+            <header class="modal-header">
+                <h2>📈 Church Statistics</h2>
+                <button class="modal-close-btn" data-modal="stats-modal">&times;</button>
+            </header>
+            <div class="stats-modal-body">
+                <!-- Key Metrics Summary -->
+                <div class="stats-summary">
+                    <div class="summary-card">
+                        <span class="summary-label">Total Weeks</span>
+                        <span class="summary-value" id="stat-total-weeks">1</span>
+                    </div>
+                    <div class="summary-card">
+                        <span class="summary-label">Peak Attendance</span>
+                        <span class="summary-value" id="stat-peak-attendance">50</span>
+                    </div>
+                    <div class="summary-card">
+                        <span class="summary-label">Peak Budget</span>
+                        <span class="summary-value" id="stat-peak-budget">$5K</span>
+                    </div>
+                    <div class="summary-card">
+                        <span class="summary-label">Total Staff Hired</span>
+                        <span class="summary-value" id="stat-staff-hired">0</span>
+                    </div>
+                </div>
+
+                <!-- Trend Charts -->
+                <div class="stats-charts">
+                    <div class="chart-section">
+                        <h3>📊 Attendance Trend</h3>
+                        <div class="chart-container" id="attendance-chart"></div>
+                    </div>
+                    <div class="chart-section">
+                        <h3>💰 Budget Trend</h3>
+                        <div class="chart-container" id="budget-chart"></div>
+                    </div>
+                    <div class="chart-section">
+                        <h3>⭐ Reputation Trend</h3>
+                        <div class="chart-container" id="reputation-chart"></div>
+                    </div>
+                </div>
+
+                <!-- Congregation Breakdown -->
+                <div class="stats-breakdown">
+                    <h3>👥 Congregation Breakdown</h3>
+                    <div class="breakdown-grid" id="congregation-breakdown"></div>
+                </div>
+            </div>
+            <footer class="modal-footer">
+                <button class="secondary-btn" data-modal="stats-modal">Close</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Start Menu Modal -->
+    <div id="start-menu" class="modal">
+        <div class="modal-overlay start-overlay"></div>
+        <div class="modal-content start-menu-content">
+            <div class="start-header">
+                <h1 class="start-title">⛪ Sim Church</h1>
+                <p class="start-subtitle">Build your congregation. Shape your community.</p>
+            </div>
+
+            <div class="start-options">
+                <button class="start-btn primary" id="btn-new-game">
+                    <span class="start-btn-icon">🆕</span>
+                    <span class="start-btn-text">New Game</span>
+                </button>
+
+                <button class="start-btn" id="btn-continue" disabled>
+                    <span class="start-btn-icon">▶️</span>
+                    <span class="start-btn-text">Continue</span>
+                    <span class="start-btn-sub" id="continue-info">No saved game</span>
+                </button>
+            </div>
+
+            <div class="game-modes" id="mode-selection">
+                <h3 class="modes-title">Game Mode</h3>
+                <div class="mode-options">
+                    <button class="mode-btn selected" data-mode="sandbox">
+                        <span class="mode-icon">🏖️</span>
+                        <span class="mode-name">Sandbox</span>
+                        <span class="mode-desc">Play freely, no win conditions</span>
+                    </button>
+                    <button class="mode-btn" data-mode="challenge" id="btn-show-scenarios">
+                        <span class="mode-icon">🏆</span>
+                        <span class="mode-name">Challenge</span>
+                        <span class="mode-desc">Complete scenarios with goals</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scenario Selection (hidden by default) -->
+            <div class="scenario-selection hidden" id="scenario-selection">
+                <h3 class="modes-title">Select Scenario</h3>
+                <div class="scenario-list" id="scenario-list">
+                    <!-- Scenarios will be inserted here -->
+                </div>
+                <button class="back-btn" id="btn-back-to-modes">← Back to Modes</button>
+            </div>
+
+            <div class="start-footer">
+                <p class="version-info">Version 0.8 • Development Build</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Policies Modal -->
+    <div id="policies-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content policies-modal">
+            <header class="modal-header">
+                <h2 class="modal-title">📜 Church Policies</h2>
+                <button class="modal-close" id="close-policies-modal">&times;</button>
+            </header>
+
+            <div class="modal-tabs">
+                <button class="tab-btn active" data-tab="current">📋 Current Policies</button>
+                <button class="tab-btn" data-tab="effects">📊 Effects</button>
+                <button class="tab-btn" data-tab="history">📜 History</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Current Policies Tab -->
+                <div id="tab-policies-current" class="tab-content active">
+                    <p class="tab-description">Shape your church's identity through these policies. Changes may affect
+                        congregation satisfaction.</p>
+
+                    <div class="policy-groups" id="policy-groups">
+                        <!-- Policy groups will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Effects Tab -->
+                <div id="tab-policies-effects" class="tab-content hidden">
+                    <h3 class="section-title">Combined Policy Effects</h3>
+                    <div class="effects-grid" id="policy-effects-grid">
+                        <!-- Effects will be inserted here -->
+                    </div>
+
+                    <h3 class="section-title">Demographic Appeal</h3>
+                    <div class="demographic-appeal" id="demographic-appeal">
+                        <!-- Appeal info will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- History Tab -->
+                <div id="tab-policies-history" class="tab-content hidden">
+                    <h3 class="section-title">Recent Policy Changes</h3>
+                    <div class="policy-history-list" id="policy-history-list">
+                        <!-- History items will be inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <footer class="modal-footer">
+                <div class="policy-warning" id="policy-warning-area">
+                    <!-- Warnings about policy conflicts will appear here -->
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Event Decision Modal -->
+    <div id="event-modal" class="modal hidden">
+        <div class="modal-overlay event-overlay"></div>
+        <div class="modal-content event-modal">
+            <header class="modal-header event-header">
+                <span class="event-icon" id="event-icon">⚡</span>
+                <h2 class="modal-title" id="event-title">Event Title</h2>
+            </header>
+
+            <div class="modal-body event-body">
+                <p class="event-description" id="event-description">
+                    Event description goes here...
+                </p>
+
+                <div class="event-choices" id="event-choices">
+                    <!-- Choice buttons will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- People Modal -->
+    <div id="people-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content people-modal">
+            <header class="modal-header">
+                <h2 class="modal-title">👥 Congregation</h2>
+                <button class="modal-close" id="close-people-modal">&times;</button>
+            </header>
+
+            <div class="modal-tabs">
+                <button class="tab-btn active" data-tab="overview">📊 Overview</button>
+                <button class="tab-btn" data-tab="members">👤 Members</button>
+                <button class="tab-btn" data-tab="demographics">📈 Demographics</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Overview Tab -->
+                <div id="tab-people-overview" class="tab-content active">
+                    <div class="congregation-stats-grid">
+                        <div class="cong-stat-card primary">
+                            <div class="cong-stat-icon">👥</div>
+                            <div class="cong-stat-value" id="cong-total">0</div>
+                            <div class="cong-stat-label">Total Members</div>
+                        </div>
+                        <div class="cong-stat-card">
+                            <div class="cong-stat-icon">✅</div>
+                            <div class="cong-stat-value" id="cong-active">0</div>
+                            <div class="cong-stat-label">Attended This Week</div>
+                        </div>
+                        <div class="cong-stat-card">
+                            <div class="cong-stat-icon">😊</div>
+                            <div class="cong-stat-value" id="cong-satisfaction">0%</div>
+                            <div class="cong-stat-label">Avg Satisfaction</div>
+                        </div>
+                        <div class="cong-stat-card">
+                            <div class="cong-stat-icon">👋</div>
+                            <div class="cong-stat-value" id="cong-visitors">0</div>
+                            <div class="cong-stat-label">Current Visitors</div>
+                        </div>
+                    </div>
+
+                    <div class="attendance-breakdown">
+                        <h3 class="section-title">Attendance Patterns</h3>
+                        <div class="pattern-bars" id="pattern-bars">
+                            <!-- Pattern bars inserted here -->
+                        </div>
+                    </div>
+
+                    <div class="giving-breakdown">
+                        <h3 class="section-title">Giving Levels</h3>
+                        <div class="giving-bars" id="giving-bars">
+                            <!-- Giving bars inserted here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Members Tab -->
+                <div id="tab-people-members" class="tab-content hidden">
+                    <div class="members-controls">
+                        <select id="member-filter" class="member-filter">
+                            <option value="all">All Members</option>
+                            <option value="visitor">Visitors</option>
+                            <option value="sporadic">Sporadic</option>
+                            <option value="regular">Regular</option>
+                            <option value="dedicated">Dedicated</option>
+                        </select>
+                        <select id="member-sort" class="member-sort">
+                            <option value="satisfaction">Sort by Satisfaction</option>
+                            <option value="name">Sort by Name</option>
+                            <option value="joined">Sort by Join Date</option>
+                        </select>
+                    </div>
+                    <div class="members-list" id="members-list">
+                        <!-- Member cards inserted here -->
+                    </div>
+                </div>
+
+                <!-- Demographics Tab -->
+                <div id="tab-people-demographics" class="tab-content hidden">
+                    <div class="demographics-section">
+                        <h3 class="section-title">Age Distribution</h3>
+                        <div class="demo-chart" id="age-chart">
+                            <!-- Age distribution bars -->
+                        </div>
+                    </div>
+
+                    <div class="demographics-section">
+                        <h3 class="section-title">Membership Tenure</h3>
+                        <div class="tenure-stats" id="tenure-stats">
+                            <!-- Tenure statistics -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="modal-footer">
+                <div class="congregation-summary">
+                    <span>Weekly giving potential: </span>
+                    <span id="giving-potential" class="giving-potential">$0</span>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Budget Modal -->
+    <div id="budget-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content budget-modal">
+            <header class="modal-header">
+                <h2 class="modal-title">💰 Budget Management</h2>
+                <button class="modal-close" id="close-budget-modal">&times;</button>
+            </header>
+
+            <div class="modal-tabs">
+                <button class="tab-btn active" data-tab="overview">📊 Overview</button>
+                <button class="tab-btn" data-tab="allocations">⚙️ Allocations</button>
+                <button class="tab-btn" data-tab="history">📈 History</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Overview Tab -->
+                <div id="tab-overview" class="tab-content active">
+                    <div class="budget-summary">
+                        <div class="budget-section income-section">
+                            <h3 class="section-title">📥 Weekly Income</h3>
+                            <div class="budget-items" id="income-breakdown">
+                                <!-- Income items will be inserted here -->
+                            </div>
+                            <div class="budget-total income-total">
+                                <span>Total Income</span>
+                                <span id="total-income">$0</span>
+                            </div>
+                        </div>
+
+                        <div class="budget-section expense-section">
+                            <h3 class="section-title">📤 Weekly Expenses</h3>
+                            <div class="budget-items" id="expense-breakdown">
+                                <!-- Expense items will be inserted here -->
+                            </div>
+                            <div class="budget-total expense-total">
+                                <span>Total Expenses</span>
+                                <span id="total-expenses">$0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="net-income-display">
+                        <div class="net-label">Net Weekly</div>
+                        <div class="net-value" id="net-weekly">+$0</div>
+                    </div>
+
+                    <div class="bank-balance-display">
+                        <div class="bank-icon">🏦</div>
+                        <div class="bank-info">
+                            <div class="bank-label">Current Balance</div>
+                            <div class="bank-value" id="current-balance">$5,000</div>
+                        </div>
+                        <div class="runway-info">
+                            <div class="runway-label">Runway</div>
+                            <div class="runway-value" id="runway-weeks">∞ weeks</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Allocations Tab -->
+                <div id="tab-allocations" class="tab-content hidden">
+                    <p class="tab-description">Adjust how much you spend on different ministry areas each week.</p>
+
+                    <div class="allocation-controls" id="allocation-controls">
+                        <!-- Allocation sliders will be inserted here -->
+                    </div>
+
+                    <div class="allocation-total">
+                        <span>Total Weekly Allocation:</span>
+                        <span id="allocation-total-value">$0</span>
+                    </div>
+                </div>
+
+                <!-- History Tab -->
+                <div id="tab-history" class="tab-content hidden">
+                    <div class="history-chart" id="history-chart">
+                        <!-- Simple bar chart will be rendered here -->
+                    </div>
+                    <div class="history-stats">
+                        <div class="history-stat">
+                            <span class="history-stat-label">Best Week</span>
+                            <span class="history-stat-value" id="best-week-income">$0</span>
+                        </div>
+                        <div class="history-stat">
+                            <span class="history-stat-label">Worst Week</span>
+                            <span class="history-stat-value" id="worst-week-income">$0</span>
+                        </div>
+                        <div class="history-stat">
+                            <span class="history-stat-label">Average</span>
+                            <span class="history-stat-value" id="avg-income">$0</span>
+                        </div>
+                    </div>
+                    <div class="history-list" id="history-list">
+                        <!-- Recent weeks will be listed here -->
+                    </div>
+                </div>
+            </div>
+
+            <footer class="modal-footer" id="budget-warning-area">
+                <!-- Warnings will appear here if needed -->
+            </footer>
+        </div>
+    </div>
+
+    <!-- Staff Modal -->
+    <div id="staff-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <header class="modal-header">
+                <h2 class="modal-title">👔 Staff Management</h2>
+                <button class="modal-close" id="close-staff-modal">&times;</button>
+            </header>
+
+            <div class="modal-tabs">
+                <button class="tab-btn active" data-tab="candidates">📋 Candidates</button>
+                <button class="tab-btn" data-tab="current">👥 Current Staff</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Candidates Tab -->
+                <div id="tab-candidates" class="tab-content active">
+                    <div id="candidates-list" class="candidates-grid">
+                        <!-- Candidate cards will be inserted here -->
+                    </div>
+                    <p id="no-candidates" class="empty-message hidden">
+                        No candidates available this week. Check back next week!
+                    </p>
+                </div>
+
+                <!-- Current Staff Tab -->
+                <div id="tab-current" class="tab-content hidden">
+                    <div id="staff-list" class="staff-grid">
+                        <!-- Staff cards will be inserted here -->
+                    </div>
+                    <p id="no-staff" class="empty-message hidden">
+                        You haven't hired any staff yet. Check the Candidates tab!
+                    </p>
+                </div>
+            </div>
+
+            <footer class="modal-footer">
+                <div class="salary-summary">
+                    <span class="salary-label">Weekly Payroll:</span>
+                    <span id="total-salaries" class="salary-amount">$0</span>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Scripts (order matters: dependencies first, then main) -->
+    <script src="js/data/names.js"></script>
+    <script src="js/data/traits.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/staff.js"></script>
+    <script src="js/congregation.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/policies.js"></script>
+    <script src="js/scenarios.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>
