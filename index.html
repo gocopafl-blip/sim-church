@@ -6,11 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sim Church</title>
     <link rel="stylesheet" href="css/main.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap"
         rel="stylesheet">
+    
+    <!-- Phaser.js Game Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 </head>
 
 <body>
@@ -19,6 +22,10 @@
         <header id="game-header">
             <h1 class="game-title">Sim Church</h1>
             <div class="header-info">
+                <span id="day-display">Sunday</span>
+                <span class="separator">•</span>
+                <span id="time-display">8:00 AM</span>
+                <span class="separator">•</span>
                 <span id="week-display">Week 1</span>
                 <span class="separator">•</span>
                 <span id="church-name">Grace Community Church</span>
@@ -58,65 +65,12 @@
 
         <!-- Main Content Area -->
         <main id="main-content">
-            <!-- Church Visual Area -->
+            <!-- Church Visual Area - Now powered by Phaser.js -->
             <section id="church-view">
-                <div class="church-scene">
-                    <!-- Sky and background -->
-                    <div class="scene-sky">
-                        <div class="cloud cloud-1"></div>
-                        <div class="cloud cloud-2"></div>
-                        <div class="cloud cloud-3"></div>
-                    </div>
-
-                    <!-- Church building -->
-                    <div class="church-building" id="church-building">
-                        <!-- Steeple -->
-                        <div class="steeple">
-                            <div class="cross"></div>
-                            <div class="steeple-roof"></div>
-                        </div>
-
-                        <!-- Main building -->
-                        <div class="main-building">
-                            <div class="roof"></div>
-                            <div class="facade">
-                                <div class="window window-left"></div>
-                                <div class="main-door">
-                                    <div class="door-frame"></div>
-                                </div>
-                                <div class="window window-right"></div>
-                            </div>
-                        </div>
-
-                        <!-- Side wings (appear at higher attendance) -->
-                        <div class="wing wing-left hidden" id="wing-left">
-                            <div class="wing-roof"></div>
-                            <div class="wing-body">
-                                <div class="wing-window"></div>
-                            </div>
-                        </div>
-                        <div class="wing wing-right hidden" id="wing-right">
-                            <div class="wing-roof"></div>
-                            <div class="wing-body">
-                                <div class="wing-window"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Ground and decorations -->
-                    <div class="scene-ground">
-                        <div class="path"></div>
-                        <div class="bush bush-1"></div>
-                        <div class="bush bush-2"></div>
-                    </div>
-
-                    <!-- People indicators -->
-                    <div class="people-indicators" id="people-indicators">
-                        <!-- People dots will be added dynamically -->
-                    </div>
-                </div>
-
-                <p class="building-status" id="building-status">Your church is getting started...</p>
+                <!-- Phaser game canvas will be inserted here -->
+                <div id="phaser-container"></div>
+                
+                <p class="building-status" id="building-status">Click the church to enter the interior view</p>
             </section>
 
             <!-- Quick Actions Panel -->
@@ -160,15 +114,16 @@
             <div class="controls-left">
                 <div class="speed-controls">
                     <span class="speed-label">Speed:</span>
-                    <button class="speed-btn active" data-speed="1">1x</button>
-                    <button class="speed-btn" data-speed="2">2x</button>
-                    <button class="speed-btn" data-speed="3">3x</button>
+                    <button class="speed-btn" data-speed="slow" title="4 min/day">🐢 Slow</button>
+                    <button class="speed-btn active" data-speed="normal" title="2 min/day">▶️ Normal</button>
+                    <button class="speed-btn" data-speed="fast" title="60 sec/day">⏩ Fast</button>
+                    <button class="speed-btn pause-btn" id="btn-pause" title="Pause/Resume">⏸️</button>
                 </div>
             </div>
             <div class="controls-center">
-                <button id="btn-next-week" class="primary-btn">
-                    <span class="btn-text">Next Week</span>
-                    <span class="btn-icon">▶️</span>
+                <button id="btn-play-pause" class="primary-btn">
+                    <span class="btn-icon" id="play-pause-icon">▶️</span>
+                    <span class="btn-text" id="play-pause-text">Play</span>
                 </button>
             </div>
             <div class="controls-right">
@@ -624,6 +579,7 @@
     </div>
 
     <!-- Scripts (order matters: dependencies first, then main) -->
+    <!-- Core game modules -->
     <script src="js/data/names.js"></script>
     <script src="js/data/traits.js"></script>
     <script src="js/state.js"></script>
@@ -634,6 +590,16 @@
     <script src="js/scenarios.js"></script>
     <script src="js/game.js"></script>
     <script src="js/ui.js"></script>
+    
+    <!-- Phaser game modules (loaded after Phaser.js from CDN) -->
+    <script src="js/phaser/systems/TimeSystem.js"></script>
+    <script src="js/phaser/systems/BuildingSystem.js"></script>
+    <script src="js/phaser/scenes/BootScene.js"></script>
+    <script src="js/phaser/scenes/ExteriorScene.js"></script>
+    <script src="js/phaser/scenes/InteriorScene.js"></script>
+    <script src="js/phaser/config.js"></script>
+    
+    <!-- Main entry point (last) -->
     <script src="js/main.js"></script>
 </body>
 

@@ -3,7 +3,7 @@
  * Predefined scenarios with specific goals and starting conditions
  */
 
-(function() {
+(function () {
     const State = window.SimChurch.State;
 
     // ========================================
@@ -220,7 +220,7 @@
      */
     function checkGoals() {
         const state = State.getState();
-        
+
         if (state.meta.gameMode !== 'challenge' || !state.meta.goals) {
             return { active: false };
         }
@@ -277,7 +277,7 @@
      */
     function getScenarioInfo() {
         const state = State.getState();
-        
+
         if (state.meta.gameMode !== 'challenge' || !state.meta.scenarioId) {
             return null;
         }

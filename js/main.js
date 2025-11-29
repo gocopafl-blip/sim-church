@@ -18,7 +18,10 @@
                 window.SimChurch.Game && 
                 window.SimChurch.UI &&
                 window.SimChurch.Events &&
-                window.SimChurch.Policies) {
+                window.SimChurch.Policies &&
+                window.SimChurch.Phaser &&
+                window.SimChurch.Phaser.TimeSystem &&
+                typeof Phaser !== 'undefined') {
                 clearInterval(checkInterval);
                 callback();
             }
@@ -39,10 +42,90 @@
         // Set up event listeners
         setupEventListeners();
         
+        // Initialize Phaser game engine
+        initPhaser();
+        
         // Show start menu
         showStartMenu();
         
         console.log('✅ Game initialized successfully!');
+    }
+    
+    /**
+     * Initialize Phaser.js game engine
+     */
+    function initPhaser() {
+        console.log('🎮 Initializing Phaser.js...');
+        
+        const PhaserModule = window.SimChurch.Phaser;
+        
+        // Initialize the game
+        PhaserModule.initGame();
+        
+        // Set up TimeSystem callbacks
+        const TimeSystem = PhaserModule.TimeSystem;
+        
+        TimeSystem.onDayChange((newDay, oldDay) => {
+            updateHeaderTimeDisplay();
+            console.log(`📅 Day changed: ${TimeSystem.DAYS[oldDay]} → ${TimeSystem.DAYS[newDay]}`);
+        });
+        
+        TimeSystem.onWeekChange((week) => {
+            const UI = window.SimChurch.UI;
+            UI.renderUI();
+            updateHeaderTimeDisplay();
+            console.log(`📆 Week ${week} started`);
+        });
+        
+        TimeSystem.onHourChange((hour, day) => {
+            updateHeaderTimeDisplay();
+        });
+        
+        TimeSystem.onServiceTime((serviceType) => {
+            const UI = window.SimChurch.UI;
+            UI.showToast(`🔔 Service time: ${serviceType.replace('-', ' ')}`, 'highlight');
+            updatePlayPauseButton();
+        });
+        
+        console.log('✅ Phaser.js initialized');
+    }
+    
+    /**
+     * Update the header time display
+     */
+    function updateHeaderTimeDisplay() {
+        const TimeSystem = window.SimChurch.Phaser?.TimeSystem;
+        const State = window.SimChurch.State;
+        
+        if (!TimeSystem) return;
+        
+        const dayDisplay = document.getElementById('day-display');
+        const timeDisplay = document.getElementById('time-display');
+        const weekDisplay = document.getElementById('week-display');
+        
+        if (dayDisplay) dayDisplay.textContent = TimeSystem.getDayName();
+        if (timeDisplay) timeDisplay.textContent = TimeSystem.getTimeString();
+        if (weekDisplay && State) {
+            const state = State.getState();
+            weekDisplay.textContent = `Week ${state?.meta?.week || TimeSystem.getState().currentWeek}`;
+        }
+    }
+    
+    /**
+     * Update play/pause button state
+     */
+    function updatePlayPauseButton() {
+        const TimeSystem = window.SimChurch.Phaser?.TimeSystem;
+        if (!TimeSystem) return;
+        
+        const isPaused = TimeSystem.isPaused();
+        const playPauseIcon = document.getElementById('play-pause-icon');
+        const playPauseText = document.getElementById('play-pause-text');
+        const pauseBtn = document.getElementById('btn-pause');
+        
+        if (playPauseIcon) playPauseIcon.textContent = isPaused ? '▶️' : '⏸️';
+        if (playPauseText) playPauseText.textContent = isPaused ? 'Play' : 'Pause';
+        if (pauseBtn) pauseBtn.textContent = isPaused ? '▶️' : '⏸️';
     }
 
     /**
@@ -208,6 +291,10 @@
         showTutorial();
         
         UI.showToast(`Started new ${gameMode} game!`, 'highlight');
+        
+        // Update the header time display
+        updateHeaderTimeDisplay();
+        updatePlayPauseButton();
     }
 
     /**
@@ -288,6 +375,10 @@
             }
             
             UI.showToast('Welcome back, Pastor!', 'positive');
+            
+            // Update the header time display
+            updateHeaderTimeDisplay();
+            updatePlayPauseButton();
         } else {
             UI.showToast('Failed to load saved game', 'negative');
         }
@@ -395,12 +486,20 @@
      * Set up all event listeners
      */
     function setupEventListeners() {
-        // Next Week button
-        const btnNextWeek = document.getElementById('btn-next-week');
-        btnNextWeek.addEventListener('click', handleNextWeek);
+        // Play/Pause button (replaces Next Week button)
+        const btnPlayPause = document.getElementById('btn-play-pause');
+        if (btnPlayPause) {
+            btnPlayPause.addEventListener('click', handlePlayPause);
+        }
+        
+        // Pause button in speed controls
+        const btnPause = document.getElementById('btn-pause');
+        if (btnPause) {
+            btnPause.addEventListener('click', handlePlayPause);
+        }
         
         // Speed buttons
-        const speedBtns = document.querySelectorAll('.speed-btn');
+        const speedBtns = document.querySelectorAll('.speed-btn:not(.pause-btn)');
         speedBtns.forEach(btn => {
             btn.addEventListener('click', handleSpeedChange);
         });
@@ -656,23 +755,43 @@
     }
 
     /**
+     * Handle Play/Pause button click
+     */
+    function handlePlayPause() {
+        const TimeSystem = window.SimChurch.Phaser?.TimeSystem;
+        if (!TimeSystem) return;
+        
+        TimeSystem.togglePause();
+        updatePlayPauseButton();
+        
+        const UI = window.SimChurch.UI;
+        const isPaused = TimeSystem.isPaused();
+        UI.showToast(isPaused ? '⏸️ Game paused' : '▶️ Game resumed', 'highlight');
+    }
+    
+    /**
      * Handle speed button clicks
      * @param {Event} e - Click event
      */
     function handleSpeedChange(e) {
-        const speedBtns = document.querySelectorAll('.speed-btn');
+        const TimeSystem = window.SimChurch.Phaser?.TimeSystem;
+        const speedBtns = document.querySelectorAll('.speed-btn:not(.pause-btn)');
         
-        // Remove active class from all
+        // Remove active class from all speed buttons (not pause)
         speedBtns.forEach(btn => btn.classList.remove('active'));
         
         // Add active class to clicked button
         e.target.classList.add('active');
         
-        // Get speed value (for future auto-advance feature)
-        const speed = parseInt(e.target.dataset.speed);
-        console.log(`⏱️ Speed set to ${speed}x`);
-        
-        // TODO: Implement auto-advance at different speeds
+        // Get speed value and set it
+        const speed = e.target.dataset.speed;
+        if (TimeSystem && speed) {
+            TimeSystem.setSpeed(speed);
+            console.log(`⏱️ Speed set to ${speed}`);
+            
+            const UI = window.SimChurch.UI;
+            UI.showToast(`Speed: ${speed.charAt(0).toUpperCase() + speed.slice(1)}`, 'highlight');
+        }
     }
 
     /**
@@ -792,23 +911,23 @@
             return;
         }
         
-        // Spacebar or Enter to advance week
-        if (e.code === 'Space' || e.code === 'Enter') {
+        // Spacebar to toggle play/pause
+        if (e.code === 'Space') {
             // Don't trigger if user is typing in an input
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
                 return;
             }
             e.preventDefault();
-            handleNextWeek();
+            handlePlayPause();
         }
         
-        // Number keys for speed
+        // Number keys for speed (1=slow, 2=normal, 3=fast)
         if (e.code === 'Digit1') {
-            document.querySelector('[data-speed="1"]')?.click();
+            document.querySelector('[data-speed="slow"]')?.click();
         } else if (e.code === 'Digit2') {
-            document.querySelector('[data-speed="2"]')?.click();
+            document.querySelector('[data-speed="normal"]')?.click();
         } else if (e.code === 'Digit3') {
-            document.querySelector('[data-speed="3"]')?.click();
+            document.querySelector('[data-speed="fast"]')?.click();
         }
         
         // Ctrl+S to save
