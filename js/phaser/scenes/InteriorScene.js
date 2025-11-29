@@ -3,7 +3,7 @@
  * Main isometric gameplay area with edge-based walls
  */
 
-(function() {
+(function () {
     'use strict';
 
     window.SimChurch = window.SimChurch || {};
@@ -16,13 +16,13 @@
     class InteriorScene extends Phaser.Scene {
         constructor() {
             super({ key: 'InteriorScene' });
-            
+
             this.isDragging = false;
             this.dragStartX = 0;
             this.dragStartY = 0;
             this.cameraStartX = 0;
             this.cameraStartY = 0;
-            
+
             // Layer containers
             this.grassLayer = null;
             this.floorLayer = null;
@@ -37,7 +37,7 @@
             // Initialize building system
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             BuildingSystem.init();
-            
+
             const dimensions = BuildingSystem.getDimensions();
 
             // Calculate world bounds
@@ -45,9 +45,9 @@
             const worldHeight = (dimensions.width + dimensions.height) * TILE_HEIGHT / 2 + 200;
 
             this.cameras.main.setBounds(
-                -worldWidth / 2 - 100, 
-                -150, 
-                worldWidth + 200, 
+                -worldWidth / 2 - 100,
+                -150,
+                worldWidth + 200,
                 worldHeight + 300
             );
 
@@ -99,7 +99,7 @@
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             const dimensions = BuildingSystem.getDimensions();
             const padding = 3;
-            
+
             for (let y = -padding; y < dimensions.height + padding; y++) {
                 for (let x = -padding; x < dimensions.width + padding; x++) {
                     // Only render grass on empty tiles (not floor)
@@ -113,10 +113,10 @@
 
         drawGrassTile(x, y, gridX, gridY) {
             const tile = this.add.graphics();
-            
+
             const variation = ((gridX * 7 + gridY * 13) % 3);
             const grassColors = [0x4A8B3A, 0x52993F, 0x458534];
-            
+
             tile.fillStyle(grassColors[variation], 1);
             tile.beginPath();
             tile.moveTo(x, y - TILE_HEIGHT / 2);
@@ -125,7 +125,7 @@
             tile.lineTo(x - TILE_WIDTH / 2, y);
             tile.closePath();
             tile.fillPath();
-            
+
             tile.setDepth(y - 1000);
             this.grassLayer.add(tile);
         }
@@ -136,7 +136,7 @@
         renderFloor() {
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             const dimensions = BuildingSystem.getDimensions();
-            
+
             for (let y = 0; y < dimensions.height; y++) {
                 for (let x = 0; x < dimensions.width; x++) {
                     if (BuildingSystem.isFloor(x, y)) {
@@ -149,10 +149,10 @@
 
         drawFloorTile(x, y, gridX, gridY) {
             const tile = this.add.graphics();
-            
+
             const isLight = (gridX + gridY) % 2 === 0;
             const baseColor = isLight ? 0x8B7355 : 0x7A6348;
-            
+
             tile.fillStyle(baseColor, 1);
             tile.beginPath();
             tile.moveTo(x, y - TILE_HEIGHT / 2);
@@ -161,10 +161,10 @@
             tile.lineTo(x - TILE_WIDTH / 2, y);
             tile.closePath();
             tile.fillPath();
-            
+
             tile.lineStyle(1, 0x5D4E37, 0.3);
             tile.strokePath();
-            
+
             tile.setDepth(y);
             this.floorLayer.add(tile);
         }
@@ -178,17 +178,17 @@
             const FEATURE = BuildingSystem.FEATURE;
             const dimensions = BuildingSystem.getDimensions();
             const wallHeight = BuildingSystem.WALL_HEIGHT;
-            
+
             // Collect wall segments for depth sorting
             const wallSegments = [];
-            
+
             for (let y = 0; y < dimensions.height; y++) {
                 for (let x = 0; x < dimensions.width; x++) {
                     if (BuildingSystem.isFloor(x, y)) {
                         const edges = BuildingSystem.getEdges(x, y);
                         const features = BuildingSystem.getFeatures(x, y);
                         const iso = this.gridToIso(x, y);
-                        
+
                         // Add wall segments for each edge that needs a wall
                         if (edges & EDGE.NORTH) {
                             wallSegments.push({
@@ -217,10 +217,10 @@
                     }
                 }
             }
-            
+
             // Sort by depth (back to front)
             wallSegments.sort((a, b) => a.depth - b.depth);
-            
+
             // Render each wall segment
             wallSegments.forEach(seg => {
                 this.drawWallEdge(seg.x, seg.y, seg.edge, seg.feature, wallHeight, seg.depth);
@@ -231,92 +231,68 @@
          * Draw a wall on a specific edge of a floor tile
          * Simple thin walls - just a parallelogram face along the edge
          */
+        /**
+         * Draw a wall on a specific edge of a floor tile
+         * Corrected for proper isometric alignment
+         */
         drawWallEdge(x, y, edge, feature, height, depth) {
             const FEATURE = SimChurch.Phaser.BuildingSystem.FEATURE;
             const wall = this.add.graphics();
-            
+
             // Brick colors
             const brickLight = 0xC17F59;
             const brickDark = 0xA66B4A;
             const mortarColor = 0x8B6B4A;
-            
+
+            // Coordinates for the 4 corners of the tile
+            const xN = x;
+            const yN = y - TILE_HEIGHT / 2;
+
+            const xS = x;
+            const yS = y + TILE_HEIGHT / 2;
+
+            const xW = x - TILE_WIDTH / 2;
+            const yW = y;
+
+            const xE = x + TILE_WIDTH / 2;
+            const yE = y;
+
+            let x1, y1, x2, y2;
+
             if (edge === 'N') {
-                // North edge wall - runs along NW diagonal (from W to N)
-                const x1 = x - TILE_WIDTH / 2;  // W corner
-                const y1 = y;
-                const x2 = x;                    // N corner
-                const y2 = y - TILE_HEIGHT / 2;
-                
-                // Simple parallelogram face
-                wall.fillStyle(brickLight, 1);
-                wall.beginPath();
-                wall.moveTo(x1, y1);
-                wall.lineTo(x2, y2);
-                wall.lineTo(x2, y2 - height);
-                wall.lineTo(x1, y1 - height);
-                wall.closePath();
-                wall.fillPath();
-                this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
-                
-                if (feature !== FEATURE.NONE) {
-                    this.drawFeatureOnWall(wall, x1, y1, x2, y2, height, edge, feature);
-                }
-                
+                // North Edge: Connects North Corner -> East Corner
+                x1 = xN;
+                y1 = yN;
+                x2 = xE;
+                y2 = yE;
             } else if (edge === 'W') {
-                // West edge wall - CURRENTLY WRONG (same as N edge)
-                // Should run along SW diagonal (from S to W)
-                const x1 = x - TILE_WIDTH / 2;  // W corner
-                const y1 = y;
-                const x2 = x;                    // N corner (WRONG - should be S)
-                const y2 = y - TILE_HEIGHT / 2;
-                
-                // Simple parallelogram face
-                wall.fillStyle(brickLight, 1);
-                wall.beginPath();
-                wall.moveTo(x1, y1);
-                wall.lineTo(x2, y2);
-                wall.lineTo(x2, y2 - height);
-                wall.lineTo(x1, y1 - height);
-                wall.closePath();
-                wall.fillPath();
-                this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
-                
-                if (feature !== FEATURE.NONE) {
-                    this.drawFeatureOnWall(wall, x1, y1, x2, y2, height, edge, feature);
-                }
-                
+                // West Edge: Connects West Corner -> North Corner
+                x1 = xW;
+                y1 = yW;
+                x2 = xN;
+                y2 = yN;
             } else if (edge === 'S') {
-                // South edge wall - runs along SE diagonal (from E to S)
-                const x1 = x + TILE_WIDTH / 2;   // E corner
-                const y1 = y;
-                const x2 = x;                     // S corner
-                const y2 = y + TILE_HEIGHT / 2;
-                
-                // Simple parallelogram face
-                wall.fillStyle(brickLight, 1);
-                wall.beginPath();
-                wall.moveTo(x1, y1);
-                wall.lineTo(x2, y2);
-                wall.lineTo(x2, y2 - height);
-                wall.lineTo(x1, y1 - height);
-                wall.closePath();
-                wall.fillPath();
-                this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
-                
-                if (feature !== FEATURE.NONE) {
-                    this.drawFeatureOnWall(wall, x1, y1, x2, y2, height, edge, feature);
-                }
-                
+                // South Edge: Connects South Corner -> West Corner
+                x1 = xS;
+                y1 = yS;
+                x2 = xW;
+                y2 = yW;
             } else if (edge === 'E') {
-                // East edge wall - CURRENTLY WRONG (same as S edge)
-                // Should run along NE diagonal (from E to N)
-                const x1 = x + TILE_WIDTH / 2;   // E corner
-                const y1 = y;
-                const x2 = x;                     // S corner (WRONG - should be N)
-                const y2 = y + TILE_HEIGHT / 2;
-                
-                // Simple parallelogram face
-                wall.fillStyle(brickLight, 1);
+                // East Edge: Connects East Corner -> South Corner
+                x1 = xE;
+                y1 = yE;
+                x2 = xS;
+                y2 = yS;
+            }
+
+            // Draw the wall face
+            if (x1 !== undefined) {
+                // Determine face color based on lighting (Left/West facing walls are usually lighter or darker)
+                // W and S walls face "Left/Front", N and E walls face "Right/Back"
+                // Simple lighting: N/E darker, S/W lighter (or vice versa depending on light source)
+                const color = (edge === 'N' || edge === 'E') ? brickDark : brickLight;
+
+                wall.fillStyle(color, 1);
                 wall.beginPath();
                 wall.moveTo(x1, y1);
                 wall.lineTo(x2, y2);
@@ -324,23 +300,23 @@
                 wall.lineTo(x1, y1 - height);
                 wall.closePath();
                 wall.fillPath();
+
                 this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
-                
+
                 if (feature !== FEATURE.NONE) {
                     this.drawFeatureOnWall(wall, x1, y1, x2, y2, height, edge, feature);
                 }
             }
-            
+
             wall.setDepth(depth * 100 + 500);
             this.wallLayer.add(wall);
         }
-
         /**
          * Add brick texture lines to a wall
          */
         addBrickLines(graphics, x1, y1, x2, y2, height, color) {
             graphics.lineStyle(1, color, 0.3);
-            
+
             const rows = 4;
             for (let i = 1; i < rows; i++) {
                 const h = height * i / rows;
@@ -353,7 +329,7 @@
          */
         drawFeatureOnWall(graphics, x1, y1, x2, y2, wallHeight, edge, feature) {
             const FEATURE = SimChurch.Phaser.BuildingSystem.FEATURE;
-            
+
             if (feature === FEATURE.DOOR) {
                 this.drawDoorOnEdge(graphics, x1, y1, x2, y2, wallHeight, edge);
             } else if (feature === FEATURE.WINDOW || feature === FEATURE.STAINED_WINDOW) {
@@ -367,26 +343,26 @@
         drawWindowOnEdge(graphics, x1, y1, x2, y2, wallHeight, edge, isStained) {
             const windowColor = isStained ? 0x6B4BA5 : 0x5588BB;
             const frameColor = 0x654321;
-            
+
             // Window dimensions relative to wall
             const winHeightRatio = 0.4;
             const winWidthRatio = 0.5;
             const winBottomRatio = 0.25;
-            
+
             const winHeight = wallHeight * winHeightRatio;
             const winBottom = wallHeight * winBottomRatio;
-            
+
             // Calculate window corners along the wall edge
             const dx = x2 - x1;
             const dy = y2 - y1;
             const startRatio = (1 - winWidthRatio) / 2;
             const endRatio = 1 - startRatio;
-            
+
             const wx1 = x1 + dx * startRatio;
             const wy1 = y1 + dy * startRatio;
             const wx2 = x1 + dx * endRatio;
             const wy2 = y1 + dy * endRatio;
-            
+
             // Draw window glass (parallelogram following wall angle)
             graphics.fillStyle(windowColor, 0.8);
             graphics.beginPath();
@@ -396,17 +372,17 @@
             graphics.lineTo(wx1, wy1 - winBottom);
             graphics.closePath();
             graphics.fillPath();
-            
+
             // Window frame
             graphics.lineStyle(2, frameColor, 1);
             graphics.strokePath();
-            
+
             // Cross dividers
             graphics.lineStyle(1, frameColor, 0.8);
             const midX = (wx1 + wx2) / 2;
             const midY1 = (wy1 + wy2) / 2;
             graphics.lineBetween(midX, midY1 - winBottom - winHeight, midX, midY1 - winBottom);
-            
+
             const midH = winBottom + winHeight / 2;
             graphics.lineBetween(wx1, wy1 - midH, wx2, wy2 - midH);
         }
@@ -417,22 +393,22 @@
         drawDoorOnEdge(graphics, x1, y1, x2, y2, wallHeight, edge) {
             const doorColor = 0x5D3A1A;
             const interiorColor = 0x1a1614;
-            
+
             const doorHeightRatio = 0.75;
             const doorWidthRatio = 0.6;
-            
+
             const doorHeight = wallHeight * doorHeightRatio;
-            
+
             const dx = x2 - x1;
             const dy = y2 - y1;
             const startRatio = (1 - doorWidthRatio) / 2;
             const endRatio = 1 - startRatio;
-            
+
             const dx1 = x1 + dx * startRatio;
             const dy1 = y1 + dy * startRatio;
             const dx2 = x1 + dx * endRatio;
             const dy2 = y1 + dy * endRatio;
-            
+
             // Door opening (dark interior)
             graphics.fillStyle(interiorColor, 1);
             graphics.beginPath();
@@ -442,7 +418,7 @@
             graphics.lineTo(dx1, dy1);
             graphics.closePath();
             graphics.fillPath();
-            
+
             // Door frame
             graphics.lineStyle(3, doorColor, 1);
             graphics.strokePath();
@@ -569,7 +545,7 @@
 
         update(time, delta) {
             const panSpeed = 5;
-            
+
             if (this.cursors.left.isDown || this.wasd.left.isDown) {
                 this.cameras.main.scrollX -= panSpeed;
             }
