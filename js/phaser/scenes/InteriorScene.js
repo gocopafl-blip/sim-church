@@ -229,19 +229,19 @@
 
         /**
          * Draw a wall on a specific edge of a floor tile
-         * Simple thin walls - just a parallelogram face along the edge
-         */
-        /**
-         * Draw a wall on a specific edge of a floor tile
-         * Corrected for proper isometric alignment
+         * With 3D depth effect (top cap and thickness)
          */
         drawWallEdge(x, y, edge, feature, height, depth) {
             const FEATURE = SimChurch.Phaser.BuildingSystem.FEATURE;
             const wall = this.add.graphics();
 
-            // Brick colors
-            const brickLight = 0xC17F59;
-            const brickDark = 0xA66B4A;
+            // Wall thickness for 3D effect
+            const WALL_THICKNESS = 4;
+
+            // Brick colors - light source from top-left
+            const brickLight = 0xC17F59;    // Lit face (S, W walls)
+            const brickDark = 0xA66B4A;     // Shadow face (N, E walls)
+            const topColor = 0xD4956B;      // Top cap (lighter)
             const mortarColor = 0x8B6B4A;
 
             // Coordinates for the 4 corners of the tile
@@ -258,6 +258,7 @@
             const yE = y;
 
             let x1, y1, x2, y2;
+            let thickOffsetX = 0, thickOffsetY = 0;
 
             if (edge === 'N') {
                 // North Edge: Connects North Corner -> East Corner
@@ -265,34 +266,46 @@
                 y1 = yN;
                 x2 = xE;
                 y2 = yE;
+                // Thickness goes inward (toward S-W)
+                thickOffsetX = -WALL_THICKNESS / 2;
+                thickOffsetY = WALL_THICKNESS / 4;
             } else if (edge === 'W') {
                 // West Edge: Connects West Corner -> North Corner
                 x1 = xW;
                 y1 = yW;
                 x2 = xN;
                 y2 = yN;
+                // Thickness goes inward (toward S-E)
+                thickOffsetX = WALL_THICKNESS / 2;
+                thickOffsetY = WALL_THICKNESS / 4;
             } else if (edge === 'S') {
                 // South Edge: Connects South Corner -> West Corner
                 x1 = xS;
                 y1 = yS;
                 x2 = xW;
                 y2 = yW;
+                // Thickness goes inward (toward N-E)
+                thickOffsetX = WALL_THICKNESS / 2;
+                thickOffsetY = -WALL_THICKNESS / 4;
             } else if (edge === 'E') {
                 // East Edge: Connects East Corner -> South Corner
                 x1 = xE;
                 y1 = yE;
                 x2 = xS;
                 y2 = yS;
+                // Thickness goes inward (toward N-W)
+                thickOffsetX = -WALL_THICKNESS / 2;
+                thickOffsetY = -WALL_THICKNESS / 4;
             }
 
-            // Draw the wall face
+            // Draw the wall with depth
             if (x1 !== undefined) {
-                // Determine face color based on lighting (Left/West facing walls are usually lighter or darker)
-                // W and S walls face "Left/Front", N and E walls face "Right/Back"
-                // Simple lighting: N/E darker, S/W lighter (or vice versa depending on light source)
-                const color = (edge === 'N' || edge === 'E') ? brickDark : brickLight;
+                // Determine face color based on lighting
+                // Light from top-left: S/W faces are lit, N/E faces are in shadow
+                const faceColor = (edge === 'N' || edge === 'E') ? brickDark : brickLight;
 
-                wall.fillStyle(color, 1);
+                // === MAIN WALL FACE ===
+                wall.fillStyle(faceColor, 1);
                 wall.beginPath();
                 wall.moveTo(x1, y1);
                 wall.lineTo(x2, y2);
@@ -301,8 +314,46 @@
                 wall.closePath();
                 wall.fillPath();
 
+                // Add brick texture lines
                 this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
 
+                // === TOP CAP (gives 3D depth) ===
+                wall.fillStyle(topColor, 1);
+                wall.beginPath();
+                wall.moveTo(x1, y1 - height);
+                wall.lineTo(x2, y2 - height);
+                wall.lineTo(x2 + thickOffsetX, y2 - height + thickOffsetY);
+                wall.lineTo(x1 + thickOffsetX, y1 - height + thickOffsetY);
+                wall.closePath();
+                wall.fillPath();
+
+                // === SIDE CAP (visible end of wall thickness) ===
+                // Only draw on certain edges for proper 3D appearance
+                if (edge === 'N' || edge === 'W') {
+                    // Draw end cap at x2,y2 corner
+                    const capColor = (edge === 'N') ? brickLight : brickDark;
+                    wall.fillStyle(capColor, 0.9);
+                    wall.beginPath();
+                    wall.moveTo(x2, y2);
+                    wall.lineTo(x2, y2 - height);
+                    wall.lineTo(x2 + thickOffsetX, y2 - height + thickOffsetY);
+                    wall.lineTo(x2 + thickOffsetX, y2 + thickOffsetY);
+                    wall.closePath();
+                    wall.fillPath();
+                } else {
+                    // Draw end cap at x1,y1 corner for S and E
+                    const capColor = (edge === 'S') ? brickDark : brickLight;
+                    wall.fillStyle(capColor, 0.9);
+                    wall.beginPath();
+                    wall.moveTo(x1, y1);
+                    wall.lineTo(x1, y1 - height);
+                    wall.lineTo(x1 + thickOffsetX, y1 - height + thickOffsetY);
+                    wall.lineTo(x1 + thickOffsetX, y1 + thickOffsetY);
+                    wall.closePath();
+                    wall.fillPath();
+                }
+
+                // Draw features (doors, windows) on top of wall
                 if (feature !== FEATURE.NONE) {
                     this.drawFeatureOnWall(wall, x1, y1, x2, y2, height, edge, feature);
                 }
