@@ -297,6 +297,160 @@
         return JSON.parse(JSON.stringify(buildingData));
     }
 
+    /**
+     * Add a feature (door/window) to an edge
+     */
+    function addFeature(gridX, gridY, edge, featureType) {
+        if (!isFloor(gridX, gridY)) {
+            console.warn('[BuildingSystem] Cannot add feature to non-floor tile');
+            return false;
+        }
+        
+        if (!featureGrid[gridY][gridX]) {
+            featureGrid[gridY][gridX] = { N: FEATURE.NONE, S: FEATURE.NONE, E: FEATURE.NONE, W: FEATURE.NONE };
+        }
+        
+        featureGrid[gridY][gridX][edge] = featureType;
+        
+        // Save to building data for persistence
+        if (featureType === FEATURE.DOOR) {
+            if (!buildingData.doors) buildingData.doors = [];
+            buildingData.doors.push({ x: gridX, y: gridY, edge: edge, type: 'interior' });
+        } else if (featureType === FEATURE.WINDOW || featureType === FEATURE.STAINED_WINDOW) {
+            if (!buildingData.windows) buildingData.windows = [];
+            buildingData.windows.push({ 
+                x: gridX, 
+                y: gridY, 
+                edge: edge, 
+                type: featureType === FEATURE.STAINED_WINDOW ? 'stained' : 'interior' 
+            });
+        }
+        
+        return true;
+    }
+
+    /**
+     * Remove a feature from an edge
+     */
+    function removeFeature(gridX, gridY, edge) {
+        if (!isFloor(gridX, gridY)) {
+            return false;
+        }
+        
+        if (!featureGrid[gridY][gridX]) {
+            return false;
+        }
+        
+        const oldFeature = featureGrid[gridY][gridX][edge];
+        featureGrid[gridY][gridX][edge] = FEATURE.NONE;
+        
+        // Remove from building data
+        if (oldFeature === FEATURE.DOOR) {
+            if (buildingData.doors) {
+                buildingData.doors = buildingData.doors.filter(d => 
+                    !(d.x === gridX && d.y === gridY && d.edge === edge && d.type === 'interior')
+                );
+            }
+        } else if (oldFeature === FEATURE.WINDOW || oldFeature === FEATURE.STAINED_WINDOW) {
+            if (buildingData.windows) {
+                buildingData.windows = buildingData.windows.filter(w => 
+                    !(w.x === gridX && w.y === gridY && w.edge === edge && w.type === 'interior')
+                );
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * Add an interior wall
+     * itemType: 'wall-straight-ns', 'wall-straight-ew', 'wall-corner-*', etc.
+     */
+    function addInteriorWall(itemType, gridX, gridY, edge) {
+        if (!isFloor(gridX, gridY)) {
+            console.warn('[BuildingSystem] Cannot add wall to non-floor tile');
+            return false;
+        }
+        
+        // For straight walls, we add an edge
+        if (itemType === 'wall-straight-ns') {
+            // North-South wall means East or West edge
+            if (edge === 'E') {
+                edgeGrid[gridY][gridX] |= EDGE.EAST;
+            } else if (edge === 'W') {
+                edgeGrid[gridY][gridX] |= EDGE.WEST;
+            }
+        } else if (itemType === 'wall-straight-ew') {
+            // East-West wall means North or South edge
+            if (edge === 'N') {
+                edgeGrid[gridY][gridX] |= EDGE.NORTH;
+            } else if (edge === 'S') {
+                edgeGrid[gridY][gridX] |= EDGE.SOUTH;
+            }
+        } else if (itemType.startsWith('wall-corner-')) {
+            // Corner walls add two edges
+            if (itemType === 'wall-corner-ne') {
+                edgeGrid[gridY][gridX] |= EDGE.NORTH;
+                edgeGrid[gridY][gridX] |= EDGE.EAST;
+            } else if (itemType === 'wall-corner-nw') {
+                edgeGrid[gridY][gridX] |= EDGE.NORTH;
+                edgeGrid[gridY][gridX] |= EDGE.WEST;
+            } else if (itemType === 'wall-corner-se') {
+                edgeGrid[gridY][gridX] |= EDGE.SOUTH;
+                edgeGrid[gridY][gridX] |= EDGE.EAST;
+            } else if (itemType === 'wall-corner-sw') {
+                edgeGrid[gridY][gridX] |= EDGE.SOUTH;
+                edgeGrid[gridY][gridX] |= EDGE.WEST;
+            }
+        }
+        
+        // Update collision grid (walls block movement)
+        // For now, we'll keep floor tiles walkable, but pathfinding will need to check edges
+        
+        // Save to building data
+        if (!buildingData.interiorWalls) {
+            buildingData.interiorWalls = [];
+        }
+        buildingData.interiorWalls.push({ x: gridX, y: gridY, type: itemType, edge: edge });
+        
+        return true;
+    }
+
+    /**
+     * Check if a wall on an edge is an interior wall (player-built)
+     */
+    function isInteriorWall(gridX, gridY, edge) {
+        if (!buildingData.interiorWalls) {
+            return false;
+        }
+        return buildingData.interiorWalls.some(w => 
+            w.x === gridX && w.y === gridY && w.edge === edge
+        );
+    }
+
+    /**
+     * Remove an interior wall
+     */
+    function removeInteriorWall(gridX, gridY, edge) {
+        if (!isFloor(gridX, gridY)) {
+            return false;
+        }
+        
+        const edgeFlag = EDGE[edge];
+        if (edgeFlag) {
+            edgeGrid[gridY][gridX] &= ~edgeFlag;
+        }
+        
+        // Remove from building data
+        if (buildingData.interiorWalls) {
+            buildingData.interiorWalls = buildingData.interiorWalls.filter(w => 
+                !(w.x === gridX && w.y === gridY && w.edge === edge)
+            );
+        }
+        
+        return true;
+    }
+
     // Expose the BuildingSystem
     SimChurch.Phaser.BuildingSystem = {
         init,
@@ -313,6 +467,11 @@
         getSections,
         updateForAttendance,
         getSaveData,
+        addFeature,
+        removeFeature,
+        addInteriorWall,
+        removeInteriorWall,
+        isInteriorWall,
         TILE_TYPES,
         EDGE,
         FEATURE,

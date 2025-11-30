@@ -29,6 +29,8 @@
             this.wallLayer = null;
             this.furnitureLayer = null;
             this.peopleLayer = null;
+            this.gridOverlayLayer = null;
+            this.previewLayer = null;
         }
 
         create() {
@@ -37,6 +39,12 @@
             // Initialize building system
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             BuildingSystem.init();
+
+            // Initialize construction system
+            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+            if (ConstructionSystem) {
+                ConstructionSystem.init();
+            }
 
             const dimensions = BuildingSystem.getDimensions();
 
@@ -59,6 +67,8 @@
             this.wallLayer = this.add.container(0, 0);
             this.furnitureLayer = this.add.container(0, 0);
             this.peopleLayer = this.add.container(0, 0);
+            this.gridOverlayLayer = this.add.container(0, 0);
+            this.previewLayer = this.add.container(0, 0);
 
             // Render building
             this.renderGrass();
@@ -478,23 +488,76 @@
         setupCameraControls() {
             this.input.on('pointerdown', (pointer) => {
                 if (pointer.button === 0) {
-                    this.isDragging = true;
-                    this.dragStartX = pointer.x;
-                    this.dragStartY = pointer.y;
-                    this.cameraStartX = this.cameras.main.scrollX;
-                    this.cameraStartY = this.cameras.main.scrollY;
+                    // Only start drag if not in construction mode or if middle/right button
+                    const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+                    const inConstructionMode = ConstructionSystem && ConstructionSystem.isActive();
+
+                    if (!inConstructionMode) {
+                        this.isDragging = true;
+                        this.dragStartX = pointer.x;
+                        this.dragStartY = pointer.y;
+                        this.cameraStartX = this.cameras.main.scrollX;
+                        this.cameraStartY = this.cameras.main.scrollY;
+                    } else {
+                        // In construction mode, don't start dragging immediately
+                        this.isDragging = false;
+                        this.dragStartX = pointer.x;
+                        this.dragStartY = pointer.y;
+                        this.cameraStartX = this.cameras.main.scrollX;
+                        this.cameraStartY = this.cameras.main.scrollY;
+                        this.hasMoved = false;
+                    }
                 }
             });
 
             this.input.on('pointermove', (pointer) => {
-                if (this.isDragging) {
-                    this.cameras.main.scrollX = this.cameraStartX - (pointer.x - this.dragStartX);
-                    this.cameras.main.scrollY = this.cameraStartY - (pointer.y - this.dragStartY);
+                const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+                const inConstructionMode = ConstructionSystem && ConstructionSystem.isActive();
+
+                if (this.dragStartX !== undefined && this.dragStartY !== undefined) {
+                    const dx = Math.abs(pointer.x - this.dragStartX);
+                    const dy = Math.abs(pointer.y - this.dragStartY);
+
+                    if (inConstructionMode) {
+                        // In construction mode, only drag if moved significantly
+                        if (dx > 5 || dy > 5) {
+                            this.isDragging = true;
+                            this.hasMoved = true;
+                            this.cameras.main.scrollX = this.cameraStartX - (pointer.x - this.dragStartX);
+                            this.cameras.main.scrollY = this.cameraStartY - (pointer.y - this.dragStartY);
+                        } else {
+                            // Handle construction mode hover
+                            this.handleConstructionHover(pointer);
+                        }
+                    } else {
+                        // Not in construction mode, normal drag behavior
+                        if (this.isDragging) {
+                            this.cameras.main.scrollX = this.cameraStartX - (pointer.x - this.dragStartX);
+                            this.cameras.main.scrollY = this.cameraStartY - (pointer.y - this.dragStartY);
+                        }
+                    }
+                } else if (!inConstructionMode) {
+                    // Normal mode, allow dragging
+                    // (construction mode hover is handled above)
                 }
             });
 
-            this.input.on('pointerup', () => {
+            this.input.on('pointerup', (pointer) => {
+                const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+                const inConstructionMode = ConstructionSystem && ConstructionSystem.isActive();
+
+                if (inConstructionMode) {
+                    // Only handle construction click if we didn't drag
+                    if (!this.hasMoved && !this.isDragging) {
+                        this.handleConstructionClick(pointer);
+                    }
+                }
+
+                // Reset drag state
                 this.isDragging = false;
+                this.hasMoved = false;
+                this.dragStartX = undefined;
+                this.dragStartY = undefined;
             });
 
             this.cursors = this.input.keyboard.createCursorKeys();
@@ -546,17 +609,40 @@
             });
 
             // Build mode button
-            const buildBtn = this.add.graphics();
-            buildBtn.fillStyle(0x2F5233, 1);
-            buildBtn.fillRoundedRect(0, 0, 120, 36, 8);
-            buildBtn.setScrollFactor(0);
-            buildBtn.setDepth(9999);
-            buildBtn.setPosition(10, 10);
+            this.buildBtn = this.add.graphics();
+            this.buildBtn.fillStyle(0x2F5233, 1);
+            this.buildBtn.fillRoundedRect(0, 0, 120, 36, 8);
+            this.buildBtn.setScrollFactor(0);
+            this.buildBtn.setDepth(9999);
+            this.buildBtn.setPosition(10, 10);
 
-            this.add.text(70, 28, '🔨 Build', {
+            this.buildBtnText = this.add.text(70, 28, '🔨 Build', {
                 font: 'bold 14px Arial',
                 fill: '#FFFFFF'
             }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(10000);
+
+            this.buildBtnHit = this.add.rectangle(70, 28, 120, 36, 0xffffff, 0)
+                .setScrollFactor(0).setDepth(10001).setInteractive({ useHandCursor: true });
+
+            this.buildBtnHit.on('pointerdown', () => {
+                const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+                if (ConstructionSystem) {
+                    const isActive = ConstructionSystem.toggleMode();
+                    this.updateBuildButton(isActive);
+                    this.updateConstructionUI();
+                }
+            });
+
+            // Construction mode indicator
+            this.constructionModeIndicator = this.add.text(10, 50, '', {
+                font: 'bold 12px Arial',
+                fill: '#FFD700',
+                backgroundColor: '#00000080',
+                padding: { x: 8, y: 4 }
+            }).setScrollFactor(0).setDepth(9999).setVisible(false);
+
+            // Construction item selection panel (hidden by default)
+            this.createConstructionPanel();
 
             // Zoom indicator
             this.zoomText = this.add.text(400, 480, 'Zoom: 100%', {
@@ -592,6 +678,454 @@
                 font: '10px Arial',
                 fill: '#88FF88'
             }).setScrollFactor(0).setDepth(9999);
+        }
+
+        updateBuildButton(isActive) {
+            if (isActive) {
+                this.buildBtn.clear().fillStyle(0x4A7C59, 1).fillRoundedRect(0, 0, 120, 36, 8).setPosition(10, 10);
+                this.buildBtnText.setText('🔨 Building');
+            } else {
+                this.buildBtn.clear().fillStyle(0x2F5233, 1).fillRoundedRect(0, 0, 120, 36, 8).setPosition(10, 10);
+                this.buildBtnText.setText('🔨 Build');
+            }
+        }
+
+        createConstructionPanel() {
+            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+            if (!ConstructionSystem) return;
+
+            // Panel background
+            this.constructionPanel = this.add.graphics();
+            this.constructionPanel.fillStyle(0x1a1a1a, 0.95);
+            this.constructionPanel.fillRoundedRect(0, 0, 200, 400, 8);
+            this.constructionPanel.setScrollFactor(0);
+            this.constructionPanel.setDepth(9997);
+            this.constructionPanel.setPosition(10, 90);
+            this.constructionPanel.setVisible(false);
+
+            // Panel title
+            this.constructionTitle = this.add.text(110, 110, 'Construction', {
+                font: 'bold 16px Arial',
+                fill: '#D4AF37'
+            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9998).setVisible(false);
+
+            // Item buttons
+            const items = [
+                { type: ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS, label: 'Wall (N-S)', cost: 50 },
+                { type: ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW, label: 'Wall (E-W)', cost: 50 },
+                { type: ConstructionSystem.ITEM_TYPES.DOOR_FRAME, label: 'Door', cost: 100 },
+                { type: ConstructionSystem.ITEM_TYPES.WINDOW_FRAME, label: 'Window', cost: 150 }
+            ];
+
+            this.constructionButtons = [];
+            items.forEach((item, index) => {
+                const y = 140 + index * 50;
+
+                const btn = this.add.graphics();
+                btn.fillStyle(0x3a3a3a, 1);
+                btn.fillRoundedRect(0, 0, 180, 40, 6);
+                btn.setScrollFactor(0);
+                btn.setDepth(9998);
+                btn.setPosition(20, y);
+                btn.y = y; // Store y position
+                btn.setVisible(false);
+
+                const btnText = this.add.text(110, y + 20, `${item.label}\n$${item.cost}`, {
+                    font: '12px Arial',
+                    fill: '#FFFFFF',
+                    align: 'center'
+                }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9999).setVisible(false);
+
+                const btnHit = this.add.rectangle(110, y + 20, 180, 40, 0xffffff, 0)
+                    .setScrollFactor(0).setDepth(10000).setInteractive({ useHandCursor: true }).setVisible(false);
+
+                btnHit.on('pointerdown', () => {
+                    ConstructionSystem.selectItem(item.type);
+                    this.updateConstructionUI();
+                });
+
+                btnHit.on('pointerover', () => {
+                    btn.clear().fillStyle(0x4a4a4a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, y);
+                });
+
+                btnHit.on('pointerout', () => {
+                    const selected = ConstructionSystem.getSelectedItem();
+                    const btnY = btn.y || y;
+                    if (selected === item.type) {
+                        btn.clear().fillStyle(0x5a7a5a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
+                    } else {
+                        btn.clear().fillStyle(0x3a3a3a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
+                    }
+                });
+
+                this.constructionButtons.push({ btn, btnText, btnHit, item, y });
+            });
+
+            // Demolish button
+            const demolishBtn = this.add.graphics();
+            demolishBtn.fillStyle(0x7a3a3a, 1);
+            demolishBtn.fillRoundedRect(0, 0, 180, 40, 6);
+            demolishBtn.setScrollFactor(0);
+            demolishBtn.setDepth(9998);
+            demolishBtn.setPosition(20, 350);
+            demolishBtn.setVisible(false);
+
+            const demolishText = this.add.text(110, 370, '🗑️ Demolish', {
+                font: 'bold 12px Arial',
+                fill: '#FFFFFF'
+            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9999).setVisible(false);
+
+            const demolishHit = this.add.rectangle(110, 370, 180, 40, 0xffffff, 0)
+                .setScrollFactor(0).setDepth(10000).setInteractive({ useHandCursor: true }).setVisible(false);
+
+            demolishHit.on('pointerdown', () => {
+                ConstructionSystem.selectItem('demolish');
+                this.updateConstructionUI();
+            });
+
+            this.demolishButton = { btn: demolishBtn, text: demolishText, hit: demolishHit };
+        }
+
+        updateConstructionUI() {
+            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+            if (!ConstructionSystem) return;
+
+            const isActive = ConstructionSystem.isActive();
+            const selectedItem = ConstructionSystem.getSelectedItem();
+
+            // Show/hide panel
+            this.constructionPanel.setVisible(isActive);
+            this.constructionTitle.setVisible(isActive);
+            this.constructionModeIndicator.setVisible(isActive);
+            this.constructionButtons.forEach(({ btn, btnText, btnHit, item, y }) => {
+                btn.setVisible(isActive);
+                btnText.setVisible(isActive);
+                btnHit.setVisible(isActive);
+
+                // Highlight selected
+                const btnY = btn.y || y;
+                if (isActive && selectedItem === item.type) {
+                    btn.clear().fillStyle(0x5a7a5a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
+                } else if (isActive) {
+                    btn.clear().fillStyle(0x3a3a3a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
+                }
+            });
+
+            if (this.demolishButton) {
+                this.demolishButton.btn.setVisible(isActive);
+                this.demolishButton.text.setVisible(isActive);
+                this.demolishButton.hit.setVisible(isActive);
+
+                if (isActive && selectedItem === 'demolish') {
+                    this.demolishButton.btn.clear().fillStyle(0x9a5a5a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, 350);
+                } else if (isActive) {
+                    this.demolishButton.btn.clear().fillStyle(0x7a3a3a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, 350);
+                }
+            }
+
+            // Update indicator
+            if (isActive) {
+                if (selectedItem) {
+                    const cost = ConstructionSystem.getCost(selectedItem);
+                    const canAfford = ConstructionSystem.canAfford(selectedItem);
+                    this.constructionModeIndicator.setText(
+                        `Construction Mode\nSelected: ${selectedItem}\nCost: $${cost} ${canAfford ? '✓' : '✗'}`
+                    );
+                    this.constructionModeIndicator.setColor(canAfford ? '#88FF88' : '#FF8888');
+                } else {
+                    this.constructionModeIndicator.setText('Construction Mode\nSelect an item');
+                    this.constructionModeIndicator.setColor('#FFD700');
+                }
+            }
+
+            // Render grid overlay
+            if (isActive) {
+                this.renderGridOverlay();
+            } else {
+                this.clearGridOverlay();
+                this.clearPreview();
+            }
+        }
+
+        renderGridOverlay() {
+            this.clearGridOverlay();
+
+            const BuildingSystem = SimChurch.Phaser.BuildingSystem;
+            const dimensions = BuildingSystem.getDimensions();
+
+            const gridGraphics = this.add.graphics();
+            gridGraphics.lineStyle(1, 0xFFFFFF, 0.3);
+
+            for (let y = 0; y < dimensions.height; y++) {
+                for (let x = 0; x < dimensions.width; x++) {
+                    if (BuildingSystem.isFloor(x, y)) {
+                        const iso = this.gridToIso(x, y);
+                        // Draw diamond outline
+                        gridGraphics.beginPath();
+                        gridGraphics.moveTo(iso.x, iso.y - TILE_HEIGHT / 2);
+                        gridGraphics.lineTo(iso.x + TILE_WIDTH / 2, iso.y);
+                        gridGraphics.lineTo(iso.x, iso.y + TILE_HEIGHT / 2);
+                        gridGraphics.lineTo(iso.x - TILE_WIDTH / 2, iso.y);
+                        gridGraphics.closePath();
+                        gridGraphics.strokePath();
+                    }
+                }
+            }
+
+            gridGraphics.setDepth(100);
+            this.gridOverlayLayer.add(gridGraphics);
+        }
+
+        clearGridOverlay() {
+            if (this.gridOverlayLayer) {
+                this.gridOverlayLayer.removeAll(true);
+            }
+        }
+
+        clearPreview() {
+            if (this.previewLayer) {
+                this.previewLayer.removeAll(true);
+            }
+        }
+
+        handleConstructionHover(pointer) {
+            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+            if (!ConstructionSystem || !ConstructionSystem.isActive()) {
+                return;
+            }
+
+            const selectedItem = ConstructionSystem.getSelectedItem();
+            if (!selectedItem) {
+                this.clearPreview();
+                return;
+            }
+
+            // Convert pointer to world coordinates
+            const worldX = this.cameras.main.getWorldPoint(pointer.x, pointer.y).x;
+            const worldY = this.cameras.main.getWorldPoint(pointer.x, pointer.y).y;
+            const grid = this.isoToGrid(worldX, worldY);
+
+            const BuildingSystem = SimChurch.Phaser.BuildingSystem;
+            if (!BuildingSystem.isFloor(grid.x, grid.y)) {
+                this.clearPreview();
+                return;
+            }
+
+            // Determine which edge for doors/windows/walls
+            let edge = null;
+            const iso = this.gridToIso(grid.x, grid.y);
+            const dx = worldX - iso.x;
+            const dy = worldY - iso.y;
+
+            if (selectedItem === ConstructionSystem.ITEM_TYPES.DOOR_FRAME ||
+                selectedItem === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME) {
+                // Doors/windows: determine edge from mouse position
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    edge = dx > 0 ? 'E' : 'W';
+                } else {
+                    edge = dy > 0 ? 'S' : 'N';
+                }
+            } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS) {
+                // N-S wall: place on E or W edge
+                edge = dx > 0 ? 'E' : 'W';
+            } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW) {
+                // E-W wall: place on N or S edge
+                edge = dy > 0 ? 'S' : 'N';
+            }
+
+            ConstructionSystem.setPreview(grid.x, grid.y, edge);
+
+            // Show preview
+            this.showPreview(grid.x, grid.y, edge, selectedItem);
+        }
+
+        showPreview(gridX, gridY, edge, itemType) {
+            this.clearPreview();
+
+            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+            const validation = ConstructionSystem.validatePlacement(itemType, gridX, gridY, edge);
+            const canAfford = ConstructionSystem.canAfford(itemType);
+            const isValid = validation.valid && canAfford;
+
+            const BuildingSystem = SimChurch.Phaser.BuildingSystem;
+            const iso = this.gridToIso(gridX, gridY);
+
+            const previewGraphics = this.add.graphics();
+            previewGraphics.lineStyle(2, isValid ? 0x88FF88 : 0xFF8888, 0.8);
+            previewGraphics.fillStyle(isValid ? 0x88FF88 : 0xFF8888, 0.3);
+
+            if (itemType === 'demolish') {
+                // Show red X for demolition
+                previewGraphics.beginPath();
+                previewGraphics.moveTo(iso.x - TILE_WIDTH / 2, iso.y - TILE_HEIGHT / 2);
+                previewGraphics.lineTo(iso.x + TILE_WIDTH / 2, iso.y + TILE_HEIGHT / 2);
+                previewGraphics.moveTo(iso.x + TILE_WIDTH / 2, iso.y - TILE_HEIGHT / 2);
+                previewGraphics.lineTo(iso.x - TILE_WIDTH / 2, iso.y + TILE_HEIGHT / 2);
+                previewGraphics.strokePath();
+            } else if (edge && (itemType === ConstructionSystem.ITEM_TYPES.DOOR_FRAME ||
+                itemType === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME)) {
+                // Preview door/window on edge
+                const edges = BuildingSystem.getEdges(gridX, gridY);
+                const edgeFlag = BuildingSystem.EDGE[edge];
+                if (edges & edgeFlag) {
+                    // Draw preview on the edge
+                    const x1 = edge === 'W' ? iso.x - TILE_WIDTH / 2 :
+                        edge === 'E' ? iso.x + TILE_WIDTH / 2 : iso.x;
+                    const y1 = edge === 'N' ? iso.y - TILE_HEIGHT / 2 :
+                        edge === 'S' ? iso.y + TILE_HEIGHT / 2 : iso.y;
+                    const x2 = edge === 'N' ? iso.x + TILE_WIDTH / 2 :
+                        edge === 'S' ? iso.x - TILE_WIDTH / 2 :
+                            edge === 'E' ? iso.x + TILE_WIDTH / 2 : iso.x - TILE_WIDTH / 2;
+                    const y2 = edge === 'N' ? iso.y :
+                        edge === 'S' ? iso.y :
+                            edge === 'E' ? iso.y + TILE_HEIGHT / 2 : iso.y - TILE_HEIGHT / 2;
+
+                    previewGraphics.beginPath();
+                    previewGraphics.moveTo(x1, y1);
+                    previewGraphics.lineTo(x2, y2);
+                    previewGraphics.lineTo(x2, y2 - BuildingSystem.WALL_HEIGHT);
+                    previewGraphics.lineTo(x1, y1 - BuildingSystem.WALL_HEIGHT);
+                    previewGraphics.closePath();
+                    previewGraphics.fillPath();
+                    previewGraphics.strokePath();
+                }
+            } else if (itemType.startsWith('wall-') && edge) {
+                // Preview wall on edge
+                const edges = BuildingSystem.getEdges(gridX, gridY);
+                const edgeFlag = BuildingSystem.EDGE[edge];
+
+                // Calculate edge coordinates
+                let x1, y1, x2, y2;
+                if (edge === 'N') {
+                    x1 = iso.x;
+                    y1 = iso.y - TILE_HEIGHT / 2;
+                    x2 = iso.x + TILE_WIDTH / 2;
+                    y2 = iso.y;
+                } else if (edge === 'S') {
+                    x1 = iso.x;
+                    y1 = iso.y + TILE_HEIGHT / 2;
+                    x2 = iso.x - TILE_WIDTH / 2;
+                    y2 = iso.y;
+                } else if (edge === 'E') {
+                    x1 = iso.x + TILE_WIDTH / 2;
+                    y1 = iso.y;
+                    x2 = iso.x;
+                    y2 = iso.y + TILE_HEIGHT / 2;
+                } else if (edge === 'W') {
+                    x1 = iso.x - TILE_WIDTH / 2;
+                    y1 = iso.y;
+                    x2 = iso.x;
+                    y2 = iso.y - TILE_HEIGHT / 2;
+                }
+
+                if (x1 !== undefined) {
+                    previewGraphics.beginPath();
+                    previewGraphics.moveTo(x1, y1);
+                    previewGraphics.lineTo(x2, y2);
+                    previewGraphics.lineTo(x2, y2 - BuildingSystem.WALL_HEIGHT);
+                    previewGraphics.lineTo(x1, y1 - BuildingSystem.WALL_HEIGHT);
+                    previewGraphics.closePath();
+                    previewGraphics.fillPath();
+                    previewGraphics.strokePath();
+                }
+            } else {
+                // Preview generic placement (fallback)
+                previewGraphics.beginPath();
+                previewGraphics.moveTo(iso.x, iso.y - TILE_HEIGHT / 2);
+                previewGraphics.lineTo(iso.x + TILE_WIDTH / 2, iso.y);
+                previewGraphics.lineTo(iso.x, iso.y + TILE_HEIGHT / 2);
+                previewGraphics.lineTo(iso.x - TILE_WIDTH / 2, iso.y);
+                previewGraphics.closePath();
+                previewGraphics.fillPath();
+                previewGraphics.strokePath();
+            }
+
+            previewGraphics.setDepth(200);
+            this.previewLayer.add(previewGraphics);
+        }
+
+        handleConstructionClick(pointer) {
+            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+            if (!ConstructionSystem || !ConstructionSystem.isActive()) {
+                return;
+            }
+
+            const selectedItem = ConstructionSystem.getSelectedItem();
+            if (!selectedItem) {
+                return;
+            }
+
+            // Convert pointer to world coordinates
+            const worldX = this.cameras.main.getWorldPoint(pointer.x, pointer.y).x;
+            const worldY = this.cameras.main.getWorldPoint(pointer.x, pointer.y).y;
+            const grid = this.isoToGrid(worldX, worldY);
+
+            const BuildingSystem = SimChurch.Phaser.BuildingSystem;
+            if (!BuildingSystem.isFloor(grid.x, grid.y)) {
+                return;
+            }
+
+            if (selectedItem === 'demolish') {
+                // Determine which edge to demolish
+                const iso = this.gridToIso(grid.x, grid.y);
+                const dx = worldX - iso.x;
+                const dy = worldY - iso.y;
+                let edge = null;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    edge = dx > 0 ? 'E' : 'W';
+                } else {
+                    edge = dy > 0 ? 'S' : 'N';
+                }
+
+                console.log(`[InteriorScene] Demolish click at grid (${grid.x}, ${grid.y}), edge: ${edge}`);
+                const result = ConstructionSystem.demolishItem(grid.x, grid.y, edge);
+                console.log(`[InteriorScene] Demolish result:`, result);
+                if (result.success) {
+                    console.log(`[ConstructionSystem] Demolished, refund: $${result.refund}`);
+                    // Re-render walls
+                    this.wallLayer.removeAll(true);
+                    this.renderWalls();
+                } else {
+                    console.warn(`[ConstructionSystem] Cannot demolish: ${result.reason}`);
+                }
+            } else {
+                // Determine edge for doors/windows/walls
+                let edge = null;
+                const iso = this.gridToIso(grid.x, grid.y);
+                const dx = worldX - iso.x;
+                const dy = worldY - iso.y;
+
+                if (selectedItem === ConstructionSystem.ITEM_TYPES.DOOR_FRAME ||
+                    selectedItem === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME) {
+                    // Doors/windows: determine edge from mouse position
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        edge = dx > 0 ? 'E' : 'W';
+                    } else {
+                        edge = dy > 0 ? 'S' : 'N';
+                    }
+                } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS) {
+                    // N-S wall: place on E or W edge
+                    edge = dx > 0 ? 'E' : 'W';
+                } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW) {
+                    // E-W wall: place on N or S edge
+                    edge = dy > 0 ? 'S' : 'N';
+                }
+
+                console.log(`[ConstructionSystem] Attempting to place ${selectedItem} at (${grid.x}, ${grid.y}), edge: ${edge}`);
+                const result = ConstructionSystem.placeItem(selectedItem, grid.x, grid.y, edge);
+                if (result.success) {
+                    console.log(`[ConstructionSystem] Successfully placed ${selectedItem}, cost: $${result.cost}`);
+                    // Re-render walls
+                    this.wallLayer.removeAll(true);
+                    this.renderWalls();
+                    // Update UI
+                    if (window.SimChurch?.UI) {
+                        window.SimChurch.UI.renderUI();
+                    }
+                } else {
+                    console.warn(`[ConstructionSystem] Cannot place: ${result.reason}`);
+                }
+            }
         }
 
         update(time, delta) {
