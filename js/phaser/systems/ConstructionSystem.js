@@ -3,7 +3,7 @@
  * Handles building placement, costs, validation, and demolition
  */
 
-(function() {
+(function () {
     'use strict';
 
     window.SimChurch = window.SimChurch || {};
@@ -11,6 +11,7 @@
 
     // Construction item types
     const ITEM_TYPES = {
+        WALL_SMART: 'wall-smart',                // NEW: Smart Context-Aware Wall
         WALL_STRAIGHT_NS: 'wall-straight-ns',    // North-South wall
         WALL_STRAIGHT_EW: 'wall-straight-ew',    // East-West wall
         WALL_CORNER_NE: 'wall-corner-ne',        // Corner (North-East)
@@ -24,6 +25,7 @@
 
     // Construction costs
     const COSTS = {
+        [ITEM_TYPES.WALL_SMART]: 50,
         [ITEM_TYPES.WALL_STRAIGHT_NS]: 50,
         [ITEM_TYPES.WALL_STRAIGHT_EW]: 50,
         [ITEM_TYPES.WALL_CORNER_NE]: 60,
@@ -87,7 +89,7 @@
             selectedItemType = 'demolish';
             return true;
         }
-        
+
         // Validate against ITEM_TYPES for actual construction items
         if (!Object.values(ITEM_TYPES).includes(itemType)) {
             console.warn('[ConstructionSystem] Invalid item type:', itemType);
@@ -150,14 +152,14 @@
         if (itemType === 'demolish') {
             return true;
         }
-        
+
         const State = window.SimChurch?.State;
         if (!State) return false;
-        
+
         const state = State.getState();
         const budget = state?.stats?.budget || 0;
         const cost = getCost(itemType);
-        
+
         return budget >= cost;
     }
 
@@ -167,7 +169,7 @@
      */
     function validatePlacement(itemType, gridX, gridY, edge = null) {
         const BuildingSystem = SimChurch.Phaser.BuildingSystem;
-        
+
         // Must be on a floor tile
         if (!BuildingSystem.isFloor(gridX, gridY)) {
             return { valid: false, reason: 'Must place on floor tile' };
@@ -183,23 +185,31 @@
             if (!edge) {
                 return { valid: false, reason: 'Must specify edge for door/window' };
             }
-            
+
             // Check if edge already has a feature
             const features = BuildingSystem.getFeatures(gridX, gridY);
             if (features[edge] !== BuildingSystem.FEATURE.NONE) {
                 return { valid: false, reason: 'Edge already has a feature' };
             }
-            
+
             // Check if edge has a wall
             const edges = BuildingSystem.getEdges(gridX, gridY);
+            // Convert single char edge (N, S, E, W) to full name used in EDGE object if needed, 
+            // BUT BuildingSystem was updated to support single letters, so this works:
             const edgeFlag = BuildingSystem.EDGE[edge];
+
             if (!(edges & edgeFlag)) {
                 return { valid: false, reason: 'No wall on this edge' };
             }
         } else if (itemType.startsWith('wall-')) {
             // Wall placement validation
-            // For now, allow walls on any edge of a floor tile
-            // TODO: Add more sophisticated validation (must connect, can't block exits)
+            // Check if wall already exists
+            const edges = BuildingSystem.getEdges(gridX, gridY);
+            const edgeFlag = BuildingSystem.EDGE[edge];
+
+            if (edges & edgeFlag) {
+                return { valid: false, reason: 'Wall already exists here' };
+            }
         }
 
         return { valid: true, reason: '' };
@@ -216,7 +226,7 @@
         }
 
         const cost = getCost(itemType);
-        
+
         // Deduct from budget
         const State = window.SimChurch?.State;
         if (State) {
@@ -249,7 +259,7 @@
      */
     function demolishItem(gridX, gridY, edge = null, isRecursive = false) {
         const BuildingSystem = SimChurch.Phaser.BuildingSystem;
-        
+
         if (!BuildingSystem.isFloor(gridX, gridY)) {
             return { success: false, refund: 0, reason: 'Not a floor tile' };
         }
@@ -261,7 +271,7 @@
         // First, check if there's a feature (door/window) to remove
         const features = BuildingSystem.getFeatures(gridX, gridY);
         const feature = features[edge];
-        
+
         if (feature !== BuildingSystem.FEATURE.NONE) {
             // Determine item type from feature
             let itemType = null;
@@ -273,10 +283,10 @@
 
             if (itemType) {
                 const refund = getDemolitionRefund(itemType);
-                
+
                 // Remove feature
                 BuildingSystem.removeFeature(gridX, gridY, edge);
-                
+
                 // Add refund to budget
                 const State = window.SimChurch?.State;
                 if (State) {
@@ -292,24 +302,24 @@
         // If no feature, check if there's an interior wall to remove
         const edges = BuildingSystem.getEdges(gridX, gridY);
         const edgeFlag = BuildingSystem.EDGE[edge];
-        
+
         console.log(`[ConstructionSystem] Checking wall demolition: grid(${gridX}, ${gridY}), edge=${edge}, edgeFlag=${edgeFlag}, edges=${edges}`);
-        
+
         // Check if there's a wall on this edge
         if (edges & edgeFlag) {
             console.log(`[ConstructionSystem] Wall exists on edge, checking if interior wall...`);
             // Check if this is an interior wall (player-built) vs exterior wall (auto-generated)
             const isInterior = BuildingSystem.isInteriorWall(gridX, gridY, edge);
             console.log(`[ConstructionSystem] Is interior wall: ${isInterior}`);
-            
+
             if (isInterior) {
                 // Determine wall type for refund calculation
                 const wallCost = 50;
                 const refund = Math.floor(wallCost * DEMOLITION_REFUND_RATIO);
-                
+
                 // Remove the wall
                 BuildingSystem.removeInteriorWall(gridX, gridY, edge);
-                
+
                 // Add refund to budget
                 const State = window.SimChurch?.State;
                 if (State) {
@@ -323,8 +333,8 @@
                 // Only return failure if we're not checking a neighbor recursively
                 return { success: false, refund: 0, reason: 'Cannot demolish exterior walls' };
             }
-        } 
-        
+        }
+
         // If checking recursively (checking neighbor), stop here to prevent infinite loops
         if (isRecursive) {
             return { success: false, refund: 0, reason: 'No feature or wall on this edge' };

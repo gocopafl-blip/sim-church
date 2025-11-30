@@ -1,12 +1,11 @@
 /**
  * BuildingSystem - Church Building Data & Rendering
  * Manages building layout, walls, doors, windows, and collision
- * 
- * NEW APPROACH: Walls are rendered on the EDGES of floor tiles, not as separate tiles.
+ * * NEW APPROACH: Walls are rendered on the EDGES of floor tiles, not as separate tiles.
  * This creates thin walls like Theme Hospital.
  */
 
-(function() {
+(function () {
     'use strict';
 
     window.SimChurch = window.SimChurch || {};
@@ -20,12 +19,18 @@
     };
 
     // Edge flags (bitmask) - which edges of a floor tile have walls
+    // Updated to include single-letter aliases for compatibility with InteriorScene logic
     const EDGE = {
         NONE: 0,
         NORTH: 1,
         SOUTH: 2,
         EAST: 4,
-        WEST: 8
+        WEST: 8,
+        // Aliases
+        N: 1,
+        S: 2,
+        E: 4,
+        W: 8
     };
 
     // Feature types for edges (doors, windows)
@@ -78,7 +83,8 @@
             { x: 7, y: 2, edge: 'N', type: 'stained' },
             { x: 9, y: 2, edge: 'N', type: 'stained' },
             { x: 11, y: 2, edge: 'N', type: 'stained' },
-        ]
+        ],
+        interiorWalls: [] // Initialize empty interior walls array
     };
 
     // Current building data
@@ -92,35 +98,65 @@
      * Initialize the building system with default or saved data
      */
     function init(savedData = null) {
-        buildingData = savedData ? { ...savedData } : JSON.parse(JSON.stringify(DEFAULT_CHURCH));
+        // 1. Try to load from argument (e.g. from save file loading)
+        if (savedData) {
+            buildingData = { ...savedData };
+        }
+        // 2. Try to load from current Game State (persistence between scenes)
+        else if (window.SimChurch?.State) {
+            const state = window.SimChurch.State.getState();
+            if (state.church?.building?.layout) {
+                buildingData = state.church.building.layout;
+            } else {
+                // First time run: use default
+                buildingData = JSON.parse(JSON.stringify(DEFAULT_CHURCH));
+            }
+        }
+        // 3. Fallback to default
+        else {
+            buildingData = JSON.parse(JSON.stringify(DEFAULT_CHURCH));
+        }
+
         generateGrids();
         console.log('[BuildingSystem] Initialized:', buildingData.name);
+    }
+
+    /**
+     * Save current building layout to the global Game State
+     */
+    function persistToState() {
+        if (window.SimChurch?.State && buildingData) {
+            // We save the buildingData object which contains walls, doors, windows arrays
+            // We do NOT need to save the computed grids (buildingGrid, edgeGrid, etc) as they are regenerated on init
+            window.SimChurch.State.updateState('church.building.layout', buildingData);
+            console.log('[BuildingSystem] Layout persisted to state');
+        }
     }
 
     /**
      * Generate all grids from section data
      */
     function generateGrids() {
-        const { width, height, sections, doors, windows } = buildingData;
-        
+        const { width, height, sections, doors, windows, interiorWalls } = buildingData;
+
         // Initialize grids
         buildingGrid = Array(height).fill(null).map(() => Array(width).fill(TILE_TYPES.EMPTY));
         edgeGrid = Array(height).fill(null).map(() => Array(width).fill(EDGE.NONE));
-        featureGrid = Array(height).fill(null).map(() => 
+        featureGrid = Array(height).fill(null).map(() =>
             Array(width).fill(null).map(() => ({ N: FEATURE.NONE, S: FEATURE.NONE, E: FEATURE.NONE, W: FEATURE.NONE }))
         );
         collisionGrid = Array(height).fill(null).map(() => Array(width).fill(true));
-        
+
         // Get current attendance to determine which sections are visible
         const State = window.SimChurch?.State;
         const attendance = State?.getState()?.stats?.attendance || 50;
-        
+
         // Process each section - mark floor tiles
         sections.forEach(section => {
             if (section.minAttendance && attendance < section.minAttendance) {
                 return;
             }
-            
+
             for (let y = section.y; y < section.y + section.height; y++) {
                 for (let x = section.x; x < section.x + section.width; x++) {
                     if (y >= 0 && y < height && x >= 0 && x < width) {
@@ -130,27 +166,42 @@
                 }
             }
         });
-        
-        // Calculate which edges of floor tiles need walls
+
+        // Calculate which edges of floor tiles need walls (Exterior shell)
         calculateEdges();
-        
+
         // Place door features
-        doors.forEach(door => {
-            if (door.x >= 0 && door.x < width && door.y >= 0 && door.y < height) {
-                if (buildingGrid[door.y][door.x] === TILE_TYPES.FLOOR) {
-                    featureGrid[door.y][door.x][door.edge] = FEATURE.DOOR;
+        if (doors) {
+            doors.forEach(door => {
+                if (door.x >= 0 && door.x < width && door.y >= 0 && door.y < height) {
+                    if (buildingGrid[door.y][door.x] === TILE_TYPES.FLOOR) {
+                        featureGrid[door.y][door.x][door.edge] = FEATURE.DOOR;
+                    }
                 }
-            }
-        });
-        
+            });
+        }
+
         // Place window features
-        windows.forEach(win => {
-            if (win.x >= 0 && win.x < width && win.y >= 0 && win.y < height) {
-                if (buildingGrid[win.y][win.x] === TILE_TYPES.FLOOR) {
-                    featureGrid[win.y][win.x][win.edge] = win.type === 'stained' ? FEATURE.STAINED_WINDOW : FEATURE.WINDOW;
+        if (windows) {
+            windows.forEach(win => {
+                if (win.x >= 0 && win.x < width && win.y >= 0 && win.y < height) {
+                    if (buildingGrid[win.y][win.x] === TILE_TYPES.FLOOR) {
+                        featureGrid[win.y][win.x][win.edge] = win.type === 'stained' ? FEATURE.STAINED_WINDOW : FEATURE.WINDOW;
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        // Re-apply interior walls from saved data
+        if (interiorWalls) {
+            interiorWalls.forEach(wall => {
+                // Add the edge flag for this wall
+                const edgeFlag = EDGE[wall.edge];
+                if (edgeFlag && isFloor(wall.x, wall.y)) {
+                    edgeGrid[wall.y][wall.x] |= edgeFlag;
+                }
+            });
+        }
     }
 
     /**
@@ -158,30 +209,30 @@
      */
     function calculateEdges() {
         const { width, height } = buildingData;
-        
+
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 if (buildingGrid[y][x] === TILE_TYPES.FLOOR) {
                     let edges = EDGE.NONE;
-                    
+
                     // Check each adjacent tile - if empty or out of bounds, we need a wall
                     // North edge
-                    if (y === 0 || buildingGrid[y-1][x] === TILE_TYPES.EMPTY) {
+                    if (y === 0 || buildingGrid[y - 1][x] === TILE_TYPES.EMPTY) {
                         edges |= EDGE.NORTH;
                     }
                     // South edge
-                    if (y === height-1 || buildingGrid[y+1][x] === TILE_TYPES.EMPTY) {
+                    if (y === height - 1 || buildingGrid[y + 1][x] === TILE_TYPES.EMPTY) {
                         edges |= EDGE.SOUTH;
                     }
                     // East edge
-                    if (x === width-1 || buildingGrid[y][x+1] === TILE_TYPES.EMPTY) {
+                    if (x === width - 1 || buildingGrid[y][x + 1] === TILE_TYPES.EMPTY) {
                         edges |= EDGE.EAST;
                     }
                     // West edge
-                    if (x === 0 || buildingGrid[y][x-1] === TILE_TYPES.EMPTY) {
+                    if (x === 0 || buildingGrid[y][x - 1] === TILE_TYPES.EMPTY) {
                         edges |= EDGE.WEST;
                     }
-                    
+
                     edgeGrid[y][x] = edges;
                 }
             }
@@ -305,27 +356,30 @@
             console.warn('[BuildingSystem] Cannot add feature to non-floor tile');
             return false;
         }
-        
+
         if (!featureGrid[gridY][gridX]) {
             featureGrid[gridY][gridX] = { N: FEATURE.NONE, S: FEATURE.NONE, E: FEATURE.NONE, W: FEATURE.NONE };
         }
-        
+
         featureGrid[gridY][gridX][edge] = featureType;
-        
+
         // Save to building data for persistence
         if (featureType === FEATURE.DOOR) {
             if (!buildingData.doors) buildingData.doors = [];
             buildingData.doors.push({ x: gridX, y: gridY, edge: edge, type: 'interior' });
         } else if (featureType === FEATURE.WINDOW || featureType === FEATURE.STAINED_WINDOW) {
             if (!buildingData.windows) buildingData.windows = [];
-            buildingData.windows.push({ 
-                x: gridX, 
-                y: gridY, 
-                edge: edge, 
-                type: featureType === FEATURE.STAINED_WINDOW ? 'stained' : 'interior' 
+            buildingData.windows.push({
+                x: gridX,
+                y: gridY,
+                edge: edge,
+                type: featureType === FEATURE.STAINED_WINDOW ? 'stained' : 'interior'
             });
         }
-        
+
+        // PERSIST CHANGE
+        persistToState();
+
         return true;
     }
 
@@ -336,29 +390,32 @@
         if (!isFloor(gridX, gridY)) {
             return false;
         }
-        
+
         if (!featureGrid[gridY][gridX]) {
             return false;
         }
-        
+
         const oldFeature = featureGrid[gridY][gridX][edge];
         featureGrid[gridY][gridX][edge] = FEATURE.NONE;
-        
+
         // Remove from building data
         if (oldFeature === FEATURE.DOOR) {
             if (buildingData.doors) {
-                buildingData.doors = buildingData.doors.filter(d => 
+                buildingData.doors = buildingData.doors.filter(d =>
                     !(d.x === gridX && d.y === gridY && d.edge === edge && d.type === 'interior')
                 );
             }
         } else if (oldFeature === FEATURE.WINDOW || oldFeature === FEATURE.STAINED_WINDOW) {
             if (buildingData.windows) {
-                buildingData.windows = buildingData.windows.filter(w => 
+                buildingData.windows = buildingData.windows.filter(w =>
                     !(w.x === gridX && w.y === gridY && w.edge === edge && w.type === 'interior')
                 );
             }
         }
-        
+
+        // PERSIST CHANGE
+        persistToState();
+
         return true;
     }
 
@@ -371,7 +428,7 @@
             console.warn('[BuildingSystem] Cannot add wall to non-floor tile');
             return false;
         }
-        
+
         // For straight walls, we add an edge
         if (itemType === 'wall-straight-ns') {
             // North-South wall means East or West edge
@@ -403,16 +460,16 @@
                 edgeGrid[gridY][gridX] |= EDGE.WEST;
             }
         }
-        
-        // Update collision grid (walls block movement)
-        // For now, we'll keep floor tiles walkable, but pathfinding will need to check edges
-        
+
         // Save to building data
         if (!buildingData.interiorWalls) {
             buildingData.interiorWalls = [];
         }
         buildingData.interiorWalls.push({ x: gridX, y: gridY, type: itemType, edge: edge });
-        
+
+        // PERSIST CHANGE
+        persistToState();
+
         return true;
     }
 
@@ -423,7 +480,7 @@
         if (!buildingData.interiorWalls) {
             return false;
         }
-        return buildingData.interiorWalls.some(w => 
+        return buildingData.interiorWalls.some(w =>
             w.x === gridX && w.y === gridY && w.edge === edge
         );
     }
@@ -435,19 +492,22 @@
         if (!isFloor(gridX, gridY)) {
             return false;
         }
-        
+
         const edgeFlag = EDGE[edge];
         if (edgeFlag) {
             edgeGrid[gridY][gridX] &= ~edgeFlag;
         }
-        
+
         // Remove from building data
         if (buildingData.interiorWalls) {
-            buildingData.interiorWalls = buildingData.interiorWalls.filter(w => 
+            buildingData.interiorWalls = buildingData.interiorWalls.filter(w =>
                 !(w.x === gridX && w.y === gridY && w.edge === edge)
             );
         }
-        
+
+        // PERSIST CHANGE
+        persistToState();
+
         return true;
     }
 

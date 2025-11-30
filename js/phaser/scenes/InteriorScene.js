@@ -23,6 +23,9 @@
             this.cameraStartX = 0;
             this.cameraStartY = 0;
 
+            // Diagnostic state to prevent console flooding
+            this.lastLogState = { gridX: null, gridY: null, edge: null };
+
             // Layer containers
             this.grassLayer = null;
             this.floorLayer = null;
@@ -185,7 +188,6 @@
         renderWalls() {
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             const EDGE = BuildingSystem.EDGE;
-            const FEATURE = BuildingSystem.FEATURE;
             const dimensions = BuildingSystem.getDimensions();
             const wallHeight = BuildingSystem.WALL_HEIGHT;
 
@@ -203,25 +205,29 @@
                         if (edges & EDGE.NORTH) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'N', feature: features.N, depth: x + y
+                                edge: 'N', feature: features.N, depth: x + y,
+                                isInterior: BuildingSystem.isInteriorWall(x, y, 'N')
                             });
                         }
                         if (edges & EDGE.SOUTH) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'S', feature: features.S, depth: x + y + 1
+                                edge: 'S', feature: features.S, depth: x + y + 1,
+                                isInterior: BuildingSystem.isInteriorWall(x, y, 'S')
                             });
                         }
                         if (edges & EDGE.EAST) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'E', feature: features.E, depth: x + y + 0.5
+                                edge: 'E', feature: features.E, depth: x + y + 0.5,
+                                isInterior: BuildingSystem.isInteriorWall(x, y, 'E')
                             });
                         }
                         if (edges & EDGE.WEST) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'W', feature: features.W, depth: x + y
+                                edge: 'W', feature: features.W, depth: x + y,
+                                isInterior: BuildingSystem.isInteriorWall(x, y, 'W')
                             });
                         }
                     }
@@ -233,7 +239,7 @@
 
             // Render each wall segment
             wallSegments.forEach(seg => {
-                this.drawWallEdge(seg.x, seg.y, seg.edge, seg.feature, wallHeight, seg.depth);
+                this.drawWallEdge(seg.x, seg.y, seg.edge, seg.feature, wallHeight, seg.depth, seg.isInterior);
             });
         }
 
@@ -241,18 +247,29 @@
          * Draw a wall on a specific edge of a floor tile
          * With 3D depth effect (top cap and thickness)
          */
-        drawWallEdge(x, y, edge, feature, height, depth) {
+        drawWallEdge(x, y, edge, feature, height, depth, isInterior = false) {
             const FEATURE = SimChurch.Phaser.BuildingSystem.FEATURE;
             const wall = this.add.graphics();
 
             // Wall thickness for 3D effect
             const WALL_THICKNESS = 4;
 
-            // Brick colors - light source from top-left
-            const brickLight = 0xC17F59;    // Lit face (S, W walls)
-            const brickDark = 0xA66B4A;     // Shadow face (N, E walls)
-            const topColor = 0xD4956B;      // Top cap (lighter)
-            const mortarColor = 0x8B6B4A;
+            // --- PALETTES ---
+            let brickLight, brickDark, topColor, mortarColor;
+
+            if (isInterior) {
+                // Interior: Smooth cream plaster with dark wood trim
+                brickLight = 0xF0F0E0;  // Cream (Lit)
+                brickDark = 0xD0D0C0;   // Darker Cream (Shadow)
+                topColor = 0x5D3A1A;    // Dark Wood Top Cap
+                mortarColor = null;     // No lines for plaster
+            } else {
+                // Exterior: Reddish-brown brick
+                brickLight = 0xC17F59;  // Lit face
+                brickDark = 0xA66B4A;   // Shadow face
+                topColor = 0xD4956B;    // Lighter brick top
+                mortarColor = 0x8B6B4A; // Dark mortar lines
+            }
 
             // Coordinates for the 4 corners of the tile
             const xN = x;
@@ -272,40 +289,20 @@
 
             if (edge === 'N') {
                 // North Edge: Connects North Corner -> East Corner
-                x1 = xN;
-                y1 = yN;
-                x2 = xE;
-                y2 = yE;
-                // Thickness goes inward (toward S-W)
-                thickOffsetX = -WALL_THICKNESS / 2;
-                thickOffsetY = WALL_THICKNESS / 4;
+                x1 = xN; y1 = yN; x2 = xE; y2 = yE;
+                thickOffsetX = -WALL_THICKNESS / 2; thickOffsetY = WALL_THICKNESS / 4;
             } else if (edge === 'W') {
                 // West Edge: Connects West Corner -> North Corner
-                x1 = xW;
-                y1 = yW;
-                x2 = xN;
-                y2 = yN;
-                // Thickness goes inward (toward S-E)
-                thickOffsetX = WALL_THICKNESS / 2;
-                thickOffsetY = WALL_THICKNESS / 4;
+                x1 = xW; y1 = yW; x2 = xN; y2 = yN;
+                thickOffsetX = WALL_THICKNESS / 2; thickOffsetY = WALL_THICKNESS / 4;
             } else if (edge === 'S') {
                 // South Edge: Connects South Corner -> West Corner
-                x1 = xS;
-                y1 = yS;
-                x2 = xW;
-                y2 = yW;
-                // Thickness goes inward (toward N-E)
-                thickOffsetX = WALL_THICKNESS / 2;
-                thickOffsetY = -WALL_THICKNESS / 4;
+                x1 = xS; y1 = yS; x2 = xW; y2 = yW;
+                thickOffsetX = WALL_THICKNESS / 2; thickOffsetY = -WALL_THICKNESS / 4;
             } else if (edge === 'E') {
                 // East Edge: Connects East Corner -> South Corner
-                x1 = xE;
-                y1 = yE;
-                x2 = xS;
-                y2 = yS;
-                // Thickness goes inward (toward N-W)
-                thickOffsetX = -WALL_THICKNESS / 2;
-                thickOffsetY = -WALL_THICKNESS / 4;
+                x1 = xE; y1 = yE; x2 = xS; y2 = yS;
+                thickOffsetX = -WALL_THICKNESS / 2; thickOffsetY = -WALL_THICKNESS / 4;
             }
 
             // Draw the wall with depth
@@ -324,8 +321,10 @@
                 wall.closePath();
                 wall.fillPath();
 
-                // Add brick texture lines
-                this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
+                // Add texture lines (Only for Exterior)
+                if (mortarColor !== null) {
+                    this.addBrickLines(wall, x1, y1, x2, y2, height, mortarColor);
+                }
 
                 // === TOP CAP (gives 3D depth) ===
                 wall.fillStyle(topColor, 1);
@@ -536,9 +535,11 @@
                             this.cameras.main.scrollY = this.cameraStartY - (pointer.y - this.dragStartY);
                         }
                     }
-                } else if (!inConstructionMode) {
-                    // Normal mode, allow dragging
-                    // (construction mode hover is handled above)
+                } else {
+                    // Mouse is moving without clicking (Hover state)
+                    if (inConstructionMode) {
+                        this.handleConstructionHover(pointer);
+                    }
                 }
             });
 
@@ -711,8 +712,8 @@
 
             // Item buttons
             const items = [
-                { type: ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS, label: 'Wall (N-S)', cost: 50 },
-                { type: ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW, label: 'Wall (E-W)', cost: 50 },
+                // Consolidated Smart Wall Button
+                { type: ConstructionSystem.ITEM_TYPES.WALL_SMART, label: 'Wall', cost: 50 },
                 { type: ConstructionSystem.ITEM_TYPES.DOOR_FRAME, label: 'Door', cost: 100 },
                 { type: ConstructionSystem.ITEM_TYPES.WINDOW_FRAME, label: 'Window', cost: 150 }
             ];
@@ -918,25 +919,49 @@
             const dy = worldY - iso.y;
 
             if (selectedItem === ConstructionSystem.ITEM_TYPES.DOOR_FRAME ||
-                selectedItem === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME) {
-                // Doors/windows: determine edge from mouse position
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    edge = dx > 0 ? 'E' : 'W';
+                selectedItem === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME ||
+                selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS ||
+                selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW ||
+                selectedItem === ConstructionSystem.ITEM_TYPES.WALL_SMART || // Add Smart Wall check
+                selectedItem === 'demolish') {
+
+                // CORRECTED LOGIC: Check quadrants relative to center
+                // Top-Right: x>0, y<0 -> N edge
+                // Bottom-Right: x>0, y>0 -> E edge
+                // Bottom-Left: x<0, y>0 -> S edge
+                // Top-Left: x<0, y<0 -> W edge
+
+                if (dx > 0) {
+                    edge = dy < 0 ? 'N' : 'E';
                 } else {
-                    edge = dy > 0 ? 'S' : 'N';
+                    edge = dy < 0 ? 'W' : 'S';
                 }
-            } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS) {
-                // N-S wall: place on E or W edge
-                edge = dx > 0 ? 'E' : 'W';
-            } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW) {
-                // E-W wall: place on N or S edge
-                edge = dy > 0 ? 'S' : 'N';
+            }
+
+            // State change check to prevent console spam
+            if (this.lastLogState.gridX !== grid.x ||
+                this.lastLogState.gridY !== grid.y ||
+                this.lastLogState.edge !== edge) {
+
+                // console.log(`[InteriorScene] Hover update: Grid(${grid.x}, ${grid.y}) Edge: ${edge} Item: ${selectedItem}`);
+
+                this.lastLogState = { gridX: grid.x, gridY: grid.y, edge: edge };
             }
 
             ConstructionSystem.setPreview(grid.x, grid.y, edge);
 
-            // Show preview
-            this.showPreview(grid.x, grid.y, edge, selectedItem);
+            // Determine actual item type for Smart Wall
+            let actualItem = selectedItem;
+            if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_SMART && edge) {
+                if (edge === 'N' || edge === 'S') {
+                    actualItem = ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW;
+                } else {
+                    actualItem = ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS;
+                }
+            }
+
+            // Show preview with actual item
+            this.showPreview(grid.x, grid.y, edge, actualItem);
         }
 
         showPreview(gridX, gridY, edge, itemType) {
@@ -947,6 +972,15 @@
             const canAfford = ConstructionSystem.canAfford(itemType);
             const isValid = validation.valid && canAfford;
 
+            // Only log detailed validation on change
+            if (this.lastLogState.gridX === gridX &&
+                this.lastLogState.gridY === gridY &&
+                this.lastLogState.edge === edge) {
+                // Throttle validation logging (maybe once per hover change)
+            } else {
+                console.log(`[InteriorScene] Validation: Valid=${isValid} Reason=${validation.reason} Cost=${ConstructionSystem.getCost(itemType)}`);
+            }
+
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             const iso = this.gridToIso(gridX, gridY);
 
@@ -955,13 +989,40 @@
             previewGraphics.fillStyle(isValid ? 0x88FF88 : 0xFF8888, 0.3);
 
             if (itemType === 'demolish') {
-                // Show red X for demolition
-                previewGraphics.beginPath();
-                previewGraphics.moveTo(iso.x - TILE_WIDTH / 2, iso.y - TILE_HEIGHT / 2);
-                previewGraphics.lineTo(iso.x + TILE_WIDTH / 2, iso.y + TILE_HEIGHT / 2);
-                previewGraphics.moveTo(iso.x + TILE_WIDTH / 2, iso.y - TILE_HEIGHT / 2);
-                previewGraphics.lineTo(iso.x - TILE_WIDTH / 2, iso.y + TILE_HEIGHT / 2);
-                previewGraphics.strokePath();
+                // Show X on the edge being hovered
+                if (edge) {
+                    const edges = BuildingSystem.getEdges(gridX, gridY);
+                    const edgeFlag = BuildingSystem.EDGE[edge];
+
+                    // Coordinates for the edge
+                    let x1, y1, x2, y2;
+                    if (edge === 'N') { x1 = iso.x; y1 = iso.y - TILE_HEIGHT / 2; x2 = iso.x + TILE_WIDTH / 2; y2 = iso.y; }
+                    else if (edge === 'E') { x1 = iso.x + TILE_WIDTH / 2; y1 = iso.y; x2 = iso.x; y2 = iso.y + TILE_HEIGHT / 2; }
+                    else if (edge === 'S') { x1 = iso.x; y1 = iso.y + TILE_HEIGHT / 2; x2 = iso.x - TILE_WIDTH / 2; y2 = iso.y; }
+                    else if (edge === 'W') { x1 = iso.x - TILE_WIDTH / 2; y1 = iso.y; x2 = iso.x; y2 = iso.y - TILE_HEIGHT / 2; }
+
+                    if (x1 !== undefined) {
+                        previewGraphics.lineStyle(3, 0xFF0000, 0.8);
+                        previewGraphics.beginPath();
+                        previewGraphics.moveTo(x1, y1);
+                        previewGraphics.lineTo(x2, y2);
+                        previewGraphics.strokePath();
+
+                        // X mark in center of edge
+                        const cx = (x1 + x2) / 2;
+                        const cy = (y1 + y2) / 2;
+                        previewGraphics.lineBetween(cx - 5, cy - 5, cx + 5, cy + 5);
+                        previewGraphics.lineBetween(cx + 5, cy - 5, cx - 5, cy + 5);
+                    }
+                } else {
+                    // Fallback X on tile center
+                    previewGraphics.beginPath();
+                    previewGraphics.moveTo(iso.x - 10, iso.y - 10);
+                    previewGraphics.lineTo(iso.x + 10, iso.y + 10);
+                    previewGraphics.moveTo(iso.x + 10, iso.y - 10);
+                    previewGraphics.lineTo(iso.x - 10, iso.y + 10);
+                    previewGraphics.strokePath();
+                }
             } else if (edge && (itemType === ConstructionSystem.ITEM_TYPES.DOOR_FRAME ||
                 itemType === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME)) {
                 // Preview door/window on edge
@@ -975,7 +1036,7 @@
                         edge === 'S' ? iso.y + TILE_HEIGHT / 2 : iso.y;
                     const x2 = edge === 'N' ? iso.x + TILE_WIDTH / 2 :
                         edge === 'S' ? iso.x - TILE_WIDTH / 2 :
-                            edge === 'E' ? iso.x + TILE_WIDTH / 2 : iso.x - TILE_WIDTH / 2;
+                            iso.x; // For both E and W, the wall ends at the center X (iso.x)
                     const y2 = edge === 'N' ? iso.y :
                         edge === 'S' ? iso.y :
                             edge === 'E' ? iso.y + TILE_HEIGHT / 2 : iso.y - TILE_HEIGHT / 2;
@@ -991,9 +1052,6 @@
                 }
             } else if (itemType.startsWith('wall-') && edge) {
                 // Preview wall on edge
-                const edges = BuildingSystem.getEdges(gridX, gridY);
-                const edgeFlag = BuildingSystem.EDGE[edge];
-
                 // Calculate edge coordinates
                 let x1, y1, x2, y2;
                 if (edge === 'N') {
@@ -1028,16 +1086,6 @@
                     previewGraphics.fillPath();
                     previewGraphics.strokePath();
                 }
-            } else {
-                // Preview generic placement (fallback)
-                previewGraphics.beginPath();
-                previewGraphics.moveTo(iso.x, iso.y - TILE_HEIGHT / 2);
-                previewGraphics.lineTo(iso.x + TILE_WIDTH / 2, iso.y);
-                previewGraphics.lineTo(iso.x, iso.y + TILE_HEIGHT / 2);
-                previewGraphics.lineTo(iso.x - TILE_WIDTH / 2, iso.y);
-                previewGraphics.closePath();
-                previewGraphics.fillPath();
-                previewGraphics.strokePath();
             }
 
             previewGraphics.setDepth(200);
@@ -1065,18 +1113,20 @@
                 return;
             }
 
-            if (selectedItem === 'demolish') {
-                // Determine which edge to demolish
-                const iso = this.gridToIso(grid.x, grid.y);
-                const dx = worldX - iso.x;
-                const dy = worldY - iso.y;
-                let edge = null;
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    edge = dx > 0 ? 'E' : 'W';
-                } else {
-                    edge = dy > 0 ? 'S' : 'N';
-                }
+            // Determine which edge
+            const iso = this.gridToIso(grid.x, grid.y);
+            const dx = worldX - iso.x;
+            const dy = worldY - iso.y;
+            let edge = null;
 
+            // CORRECTED LOGIC: Check quadrants relative to center
+            if (dx > 0) {
+                edge = dy < 0 ? 'N' : 'E';
+            } else {
+                edge = dy < 0 ? 'W' : 'S';
+            }
+
+            if (selectedItem === 'demolish') {
                 console.log(`[InteriorScene] Demolish click at grid (${grid.x}, ${grid.y}), edge: ${edge}`);
                 const result = ConstructionSystem.demolishItem(grid.x, grid.y, edge);
                 console.log(`[InteriorScene] Demolish result:`, result);
@@ -1089,32 +1139,21 @@
                     console.warn(`[ConstructionSystem] Cannot demolish: ${result.reason}`);
                 }
             } else {
-                // Determine edge for doors/windows/walls
-                let edge = null;
-                const iso = this.gridToIso(grid.x, grid.y);
-                const dx = worldX - iso.x;
-                const dy = worldY - iso.y;
-
-                if (selectedItem === ConstructionSystem.ITEM_TYPES.DOOR_FRAME ||
-                    selectedItem === ConstructionSystem.ITEM_TYPES.WINDOW_FRAME) {
-                    // Doors/windows: determine edge from mouse position
-                    if (Math.abs(dx) > Math.abs(dy)) {
-                        edge = dx > 0 ? 'E' : 'W';
+                // Determine actual item type for Smart Wall
+                let actualItem = selectedItem;
+                if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_SMART && edge) {
+                    if (edge === 'N' || edge === 'S') {
+                        actualItem = ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW;
                     } else {
-                        edge = dy > 0 ? 'S' : 'N';
+                        actualItem = ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS;
                     }
-                } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_NS) {
-                    // N-S wall: place on E or W edge
-                    edge = dx > 0 ? 'E' : 'W';
-                } else if (selectedItem === ConstructionSystem.ITEM_TYPES.WALL_STRAIGHT_EW) {
-                    // E-W wall: place on N or S edge
-                    edge = dy > 0 ? 'S' : 'N';
                 }
 
-                console.log(`[ConstructionSystem] Attempting to place ${selectedItem} at (${grid.x}, ${grid.y}), edge: ${edge}`);
-                const result = ConstructionSystem.placeItem(selectedItem, grid.x, grid.y, edge);
+                // Determine edge for doors/windows/walls
+                console.log(`[ConstructionSystem] Attempting to place ${actualItem} at (${grid.x}, ${grid.y}), edge: ${edge}`);
+                const result = ConstructionSystem.placeItem(actualItem, grid.x, grid.y, edge);
                 if (result.success) {
-                    console.log(`[ConstructionSystem] Successfully placed ${selectedItem}, cost: $${result.cost}`);
+                    console.log(`[ConstructionSystem] Successfully placed ${actualItem}, cost: $${result.cost}`);
                     // Re-render walls
                     this.wallLayer.removeAll(true);
                     this.renderWalls();
@@ -1166,4 +1205,3 @@
     SimChurch.Phaser.InteriorScene = InteriorScene;
 
 })();
-

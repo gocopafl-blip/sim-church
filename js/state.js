@@ -18,7 +18,8 @@ const initialState = {
         building: {
             size: 'small',
             condition: 100,
-            capacity: 150
+            capacity: 150,
+            layout: null // Placeholder for building layout data
         }
     },
     stats: {
@@ -82,13 +83,13 @@ let gameState = null;
 function initializeState() {
     gameState = JSON.parse(JSON.stringify(initialState));
     gameState.meta.startedAt = Date.now();
-    
+
     // Generate initial congregation if Congregation module is loaded
     if (window.SimChurch && window.SimChurch.Congregation) {
         const Congregation = window.SimChurch.Congregation;
         gameState.congregation = Congregation.generateInitialCongregation(50);
     }
-    
+
     return gameState;
 }
 
@@ -111,11 +112,11 @@ function getState() {
 function updateState(path, value) {
     const keys = path.split('.');
     let current = gameState;
-    
+
     for (let i = 0; i < keys.length - 1; i++) {
         current = current[keys[i]];
     }
-    
+
     current[keys[keys.length - 1]] = value;
 }
 
@@ -124,7 +125,7 @@ function updateState(path, value) {
  */
 function storePreviousStats() {
     if (!gameState) return;
-    
+
     gameState.previousStats = {
         attendance: gameState.stats.attendance,
         budget: gameState.stats.budget,
@@ -165,13 +166,13 @@ function getCurrentWeek() {
  */
 function addNews(text, type = 'normal') {
     if (!gameState) return;
-    
+
     gameState.news.unshift({
         text,
         type,
         week: gameState.meta.week
     });
-    
+
     // Keep only last 50 news items
     if (gameState.news.length > 50) {
         gameState.news.pop();
