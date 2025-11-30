@@ -41,6 +41,25 @@
         STAINED_WINDOW: 3
     };
 
+    // Furniture types (objects that occupy a tile)
+    const FURNITURE = {
+        NONE: 0,
+        // Seating
+        PEW: 1,
+        CHAIR: 2,
+        // Fixtures
+        PULPIT: 10,
+        ALTAR: 11,
+        COMMUNION_TABLE: 12,
+        // Instruments
+        PIANO: 20,
+        ORGAN: 21,
+        DRUM_SET: 22,
+        // Decor
+        PLANT: 30,
+        CROSS: 31
+    };
+
     // Wall visual heights
     const WALL_HEIGHT = 48;
     const INTERIOR_WALL_HEIGHT = 32;
@@ -92,6 +111,7 @@
     let buildingGrid = null;      // TILE_TYPES for each cell
     let edgeGrid = null;          // EDGE bitmask for each floor cell (which edges have walls)
     let featureGrid = null;       // Features on each edge { N: FEATURE, S: FEATURE, ... }
+    let furnitureGrid = null;     // Furniture items on each tile
     let collisionGrid = null;
 
     /**
@@ -137,7 +157,7 @@
      * Generate all grids from section data
      */
     function generateGrids() {
-        const { width, height, sections, doors, windows, interiorWalls } = buildingData;
+        const { width, height, sections, doors, windows, interiorWalls, furniture } = buildingData;
 
         // Initialize grids
         buildingGrid = Array(height).fill(null).map(() => Array(width).fill(TILE_TYPES.EMPTY));
@@ -145,6 +165,7 @@
         featureGrid = Array(height).fill(null).map(() =>
             Array(width).fill(null).map(() => ({ N: FEATURE.NONE, S: FEATURE.NONE, E: FEATURE.NONE, W: FEATURE.NONE }))
         );
+        furnitureGrid = Array(height).fill(null).map(() => Array(width).fill(null));
         collisionGrid = Array(height).fill(null).map(() => Array(width).fill(true));
 
         // Get current attendance to determine which sections are visible
@@ -199,6 +220,20 @@
                 const edgeFlag = EDGE[wall.edge];
                 if (edgeFlag && isFloor(wall.x, wall.y)) {
                     edgeGrid[wall.y][wall.x] |= edgeFlag;
+                }
+            });
+        }
+
+        // Re-apply furniture from saved data
+        if (furniture) {
+            furniture.forEach(item => {
+                if (isFloor(item.x, item.y)) {
+                    furnitureGrid[item.y][item.x] = { 
+                        type: item.type, 
+                        rotation: item.rotation || 0 
+                    };
+                    // Update collision - assume most furniture blocks movement
+                    collisionGrid[item.y][item.x] = true;
                 }
             });
         }
@@ -511,12 +546,78 @@
         return true;
     }
 
+    /**
+     * Get furniture for a floor tile
+     */
+    function getFurniture(gridX, gridY) {
+        if (!furnitureGrid) return null;
+        if (gridX < 0 || gridX >= buildingData.width) return null;
+        if (gridY < 0 || gridY >= buildingData.height) return null;
+        return furnitureGrid[gridY][gridX];
+    }
+
+    /**
+     * Add furniture to a tile
+     */
+    function addFurniture(gridX, gridY, type, rotation = 0) {
+        if (!isFloor(gridX, gridY)) {
+            console.warn('[BuildingSystem] Cannot add furniture to non-floor tile');
+            return false;
+        }
+
+        if (furnitureGrid[gridY][gridX] !== null) {
+            console.warn('[BuildingSystem] Tile already has furniture');
+            return false;
+        }
+
+        furnitureGrid[gridY][gridX] = { type, rotation };
+        collisionGrid[gridY][gridX] = true; // Block movement
+
+        // Save to building data
+        if (!buildingData.furniture) {
+            buildingData.furniture = [];
+        }
+        buildingData.furniture.push({ x: gridX, y: gridY, type: type, rotation: rotation });
+        
+        // PERSIST CHANGE
+        persistToState();
+        
+        return true;
+    }
+
+    /**
+     * Remove furniture from a tile
+     */
+    function removeFurniture(gridX, gridY) {
+        if (!isFloor(gridX, gridY)) {
+            return false;
+        }
+
+        if (furnitureGrid[gridY][gridX] === null) {
+            return false;
+        }
+
+        furnitureGrid[gridY][gridX] = null;
+        collisionGrid[gridY][gridX] = false; // Unblock movement
+
+        // Remove from building data
+        if (buildingData.furniture) {
+            buildingData.furniture = buildingData.furniture.filter(f => !(f.x === gridX && f.y === gridY));
+        }
+
+        // PERSIST CHANGE
+        persistToState();
+
+        return true;
+    }
+
     // Expose the BuildingSystem
     SimChurch.Phaser.BuildingSystem = {
         init,
         getGrid,
         getEdges,
         getFeatures,
+        getFurniture,
         getCollisionGrid,
         isFloor,
         isWalkable,
@@ -532,11 +633,13 @@
         addInteriorWall,
         removeInteriorWall,
         isInteriorWall,
+        addFurniture,
+        removeFurniture,
         TILE_TYPES,
         EDGE,
         FEATURE,
+        FURNITURE,
         WALL_HEIGHT,
         INTERIOR_WALL_HEIGHT
     };
-
 })();

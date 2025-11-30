@@ -76,6 +76,7 @@
             // Render building
             this.renderGrass();
             this.renderFloor();
+            this.renderFurniture(); // Initial furniture render
             this.renderWalls();
 
             // UI and controls
@@ -180,6 +181,116 @@
 
             tile.setDepth(y);
             this.floorLayer.add(tile);
+        }
+
+        /**
+         * Render furniture on floor tiles
+         */
+        renderFurniture() {
+            const BuildingSystem = SimChurch.Phaser.BuildingSystem;
+            const dimensions = BuildingSystem.getDimensions();
+            
+            // Clear existing furniture
+            this.furnitureLayer.removeAll(true);
+
+            for (let y = 0; y < dimensions.height; y++) {
+                for (let x = 0; x < dimensions.width; x++) {
+                    const furniture = BuildingSystem.getFurniture(x, y);
+                    if (furniture) {
+                        const iso = this.gridToIso(x, y);
+                        this.drawFurniture(iso.x, iso.y, x, y, furniture.type, furniture.rotation);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Draw a specific furniture item
+         */
+        drawFurniture(x, y, gridX, gridY, type, rotation) {
+            const BuildingSystem = SimChurch.Phaser.BuildingSystem;
+            const F = BuildingSystem.FURNITURE;
+            
+            const graphics = this.add.graphics();
+            
+            if (type === F.PEW) {
+                // Pew: Long bench
+                graphics.fillStyle(0x8B4513, 1); // Saddle Brown
+                
+                let w = 40;
+                let h = 20;
+                // Swap dimensions if rotated 90 or 270 degrees
+                if (rotation === 1 || rotation === 3) {
+                    w = 20;
+                    h = 40;
+                }
+                
+                const z = 15;
+                // Draw simplified 3D box
+                // Top
+                graphics.beginPath();
+                graphics.moveTo(x - w/2, y - h/2 - z);
+                graphics.lineTo(x + w/2, y - h/2 - z);
+                graphics.lineTo(x + w/2, y + h/2 - z);
+                graphics.lineTo(x - w/2, y + h/2 - z);
+                graphics.closePath();
+                graphics.fillPath();
+                // Front
+                graphics.fillStyle(0x5D3A1A, 1); // Darker brown
+                graphics.beginPath();
+                graphics.moveTo(x - w/2, y + h/2 - z);
+                graphics.lineTo(x + w/2, y + h/2 - z);
+                graphics.lineTo(x + w/2, y + h/2);
+                graphics.lineTo(x - w/2, y + h/2);
+                graphics.closePath();
+                graphics.fillPath();
+            } else if (type === F.PULPIT) {
+                // Pulpit: Tall podium
+                graphics.fillStyle(0x5D3A1A, 1);
+                const w = 20;
+                const h = 20;
+                const z = 30;
+                graphics.fillRect(x - w/2, y - z, w, z); // Front face projection
+                // Top
+                graphics.fillStyle(0x8B4513, 1);
+                graphics.beginPath();
+                graphics.moveTo(x - w/2, y - z - h/2);
+                graphics.lineTo(x + w/2, y - z - h/2);
+                graphics.lineTo(x + w/2, y - z + h/2);
+                graphics.lineTo(x - w/2, y - z + h/2);
+                graphics.closePath();
+                graphics.fillPath();
+            } else if (type === F.PIANO) {
+                // Piano: Black
+                graphics.fillStyle(0x111111, 1);
+                let w = 40;
+                let h = 30;
+                if (rotation === 1 || rotation === 3) {
+                    w = 30;
+                    h = 40;
+                }
+                const z = 25;
+                // Top
+                graphics.beginPath();
+                graphics.moveTo(x - w/2, y - z - h/2);
+                graphics.lineTo(x + w/2, y - z - h/2);
+                graphics.lineTo(x + w/2, y - z + h/2);
+                graphics.lineTo(x - w/2, y - z + h/2);
+                graphics.closePath();
+                graphics.fillPath();
+                // Front
+                graphics.fillRect(x - w/2, y - z + h/2, w, z);
+            } else if (type === F.PLANT) {
+                // Plant: Green circle
+                graphics.fillStyle(0x228B22, 1); // Forest Green
+                graphics.fillCircle(x, y - 15, 10);
+                // Pot
+                graphics.fillStyle(0xA0522D, 1); // Sienna
+                graphics.fillRect(x - 5, y - 10, 10, 10);
+            }
+
+            graphics.setDepth(gridY + gridX + 1); // Higher depth than floor
+            this.furnitureLayer.add(graphics);
         }
 
         /**
@@ -576,6 +687,22 @@
                 );
                 this.cameras.main.setZoom(newZoom);
             });
+
+            // Rotation key
+            this.input.keyboard.on('keydown-R', () => {
+                const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
+                if (ConstructionSystem && ConstructionSystem.isActive()) {
+                    const newRotation = ConstructionSystem.rotateItem();
+                    console.log(`[InteriorScene] Rotated item to: ${newRotation}`);
+                    
+                    // Force preview update if hovering
+                    const { gridX, gridY, edge } = ConstructionSystem.getPreview();
+                    if (gridX !== null && gridY !== null) {
+                         const selectedItem = ConstructionSystem.getSelectedItem();
+                         this.showPreview(gridX, gridY, edge, selectedItem);
+                    }
+                }
+            });
         }
 
         createUIOverlay() {
@@ -715,7 +842,11 @@
                 // Consolidated Smart Wall Button
                 { type: ConstructionSystem.ITEM_TYPES.WALL_SMART, label: 'Wall', cost: 50 },
                 { type: ConstructionSystem.ITEM_TYPES.DOOR_FRAME, label: 'Door', cost: 100 },
-                { type: ConstructionSystem.ITEM_TYPES.WINDOW_FRAME, label: 'Window', cost: 150 }
+                { type: ConstructionSystem.ITEM_TYPES.WINDOW_FRAME, label: 'Window', cost: 150 },
+                { type: ConstructionSystem.ITEM_TYPES.PEW, label: 'Pew', cost: 100 },
+                { type: ConstructionSystem.ITEM_TYPES.PULPIT, label: 'Pulpit', cost: 200 },
+                { type: ConstructionSystem.ITEM_TYPES.PIANO, label: 'Piano', cost: 800 },
+                { type: ConstructionSystem.ITEM_TYPES.PLANT, label: 'Plant', cost: 50 }
             ];
 
             this.constructionButtons = [];
@@ -936,6 +1067,8 @@
                 } else {
                     edge = dy < 0 ? 'W' : 'S';
                 }
+            } else if (selectedItem && selectedItem.startsWith('furniture-')) {
+                edge = null;
             }
 
             // State change check to prevent console spam
@@ -1086,6 +1219,51 @@
                     previewGraphics.fillPath();
                     previewGraphics.strokePath();
                 }
+            } else if (itemType.startsWith('furniture-')) {
+                // Preview furniture on center of tile
+                previewGraphics.fillStyle(isValid ? 0x88FF88 : 0xFF8888, 0.5);
+                
+                // Determine dimensions based on item type and rotation
+                let w = 30;
+                let h = 30;
+                const rotation = ConstructionSystem.getRotation();
+                
+                if (itemType === ConstructionSystem.ITEM_TYPES.PEW) {
+                    w = 40; h = 20;
+                    if (rotation === 1 || rotation === 3) { w = 20; h = 40; }
+                } else if (itemType === ConstructionSystem.ITEM_TYPES.PIANO) {
+                    w = 40; h = 30;
+                    if (rotation === 1 || rotation === 3) { w = 30; h = 40; }
+                } else if (itemType === ConstructionSystem.ITEM_TYPES.PULPIT) {
+                    w = 20; h = 20;
+                } else if (itemType === ConstructionSystem.ITEM_TYPES.PLANT) {
+                    w = 20; h = 20;
+                }
+                
+                // Draw rotated rectangle on the tile (isometric projection approximately)
+                // For true iso, we'd need to project the corners, but simple box is okay for preview
+                previewGraphics.beginPath();
+                previewGraphics.moveTo(iso.x - w/2, iso.y - h/2);
+                previewGraphics.lineTo(iso.x + w/2, iso.y - h/2);
+                previewGraphics.lineTo(iso.x + w/2, iso.y + h/2);
+                previewGraphics.lineTo(iso.x - w/2, iso.y + h/2);
+                previewGraphics.closePath();
+                previewGraphics.fillPath();
+                
+                // Draw outline
+                previewGraphics.lineStyle(2, isValid ? 0x88FF88 : 0xFF8888, 0.8);
+                previewGraphics.strokePath();
+                
+                // Draw direction arrow (simple line)
+                previewGraphics.beginPath();
+                previewGraphics.moveTo(iso.x, iso.y);
+                let dx = 0, dy = 0;
+                if (rotation === 0) dx = w/2;
+                else if (rotation === 1) dy = h/2;
+                else if (rotation === 2) dx = -w/2;
+                else if (rotation === 3) dy = -h/2;
+                previewGraphics.lineTo(iso.x + dx, iso.y + dy);
+                previewGraphics.strokePath();
             }
 
             previewGraphics.setDepth(200);
@@ -1132,9 +1310,11 @@
                 console.log(`[InteriorScene] Demolish result:`, result);
                 if (result.success) {
                     console.log(`[ConstructionSystem] Demolished, refund: $${result.refund}`);
-                    // Re-render walls
+                    // Re-render walls and furniture
                     this.wallLayer.removeAll(true);
+                    this.furnitureLayer.removeAll(true);
                     this.renderWalls();
+                    this.renderFurniture();
                 } else {
                     console.warn(`[ConstructionSystem] Cannot demolish: ${result.reason}`);
                 }
@@ -1149,14 +1329,20 @@
                     }
                 }
 
-                // Determine edge for doors/windows/walls
+                // Determine edge for doors/windows/walls (not needed for furniture)
+                if (actualItem.startsWith('furniture-')) {
+                    edge = null;
+                }
+
                 console.log(`[ConstructionSystem] Attempting to place ${actualItem} at (${grid.x}, ${grid.y}), edge: ${edge}`);
                 const result = ConstructionSystem.placeItem(actualItem, grid.x, grid.y, edge);
                 if (result.success) {
                     console.log(`[ConstructionSystem] Successfully placed ${actualItem}, cost: $${result.cost}`);
-                    // Re-render walls
+                    // Re-render walls and furniture
                     this.wallLayer.removeAll(true);
+                    this.furnitureLayer.removeAll(true);
                     this.renderWalls();
+                    this.renderFurniture();
                     // Update UI
                     if (window.SimChurch?.UI) {
                         window.SimChurch.UI.renderUI();

@@ -20,7 +20,11 @@
         WALL_CORNER_SW: 'wall-corner-sw',        // Corner (South-West)
         DOOR_FRAME: 'door-frame',
         WINDOW_FRAME: 'window-frame',
-        STAIRWELL: 'stairwell'
+        // Furniture
+        PEW: 'furniture-pew',
+        PULPIT: 'furniture-pulpit',
+        PIANO: 'furniture-piano',
+        PLANT: 'furniture-plant'
     };
 
     // Construction costs
@@ -34,7 +38,10 @@
         [ITEM_TYPES.WALL_CORNER_SW]: 60,
         [ITEM_TYPES.DOOR_FRAME]: 100,
         [ITEM_TYPES.WINDOW_FRAME]: 150,
-        [ITEM_TYPES.STAIRWELL]: 200
+        [ITEM_TYPES.PEW]: 100,
+        [ITEM_TYPES.PULPIT]: 200,
+        [ITEM_TYPES.PIANO]: 800,
+        [ITEM_TYPES.PLANT]: 50
     };
 
     // Demolition refund (50% of original cost)
@@ -43,6 +50,7 @@
     // Current state
     let isConstructionMode = false;
     let selectedItemType = null;
+    let currentRotation = 0; // 0=0, 1=90, 2=180, 3=270
     let previewGridX = null;
     let previewGridY = null;
     let previewEdge = null;
@@ -53,6 +61,7 @@
     function init() {
         isConstructionMode = false;
         selectedItemType = null;
+        currentRotation = 0;
         previewGridX = null;
         previewGridY = null;
         previewEdge = null;
@@ -96,7 +105,24 @@
             return false;
         }
         selectedItemType = itemType;
+        // Reset rotation when selecting new item
+        currentRotation = 0;
         return true;
+    }
+
+    /**
+     * Rotate the currently selected item
+     */
+    function rotateItem() {
+        currentRotation = (currentRotation + 1) % 4;
+        return currentRotation;
+    }
+
+    /**
+     * Get current rotation
+     */
+    function getRotation() {
+        return currentRotation;
     }
 
     /**
@@ -210,6 +236,13 @@
             if (edges & edgeFlag) {
                 return { valid: false, reason: 'Wall already exists here' };
             }
+        } else if (itemType.startsWith('furniture-')) {
+            // Furniture placement validation
+            // Check if tile is empty (no existing furniture)
+            const furniture = BuildingSystem.getFurniture(gridX, gridY);
+            if (furniture !== null) {
+                return { valid: false, reason: 'Space already occupied' };
+            }
         }
 
         return { valid: true, reason: '' };
@@ -248,6 +281,19 @@
         } else if (itemType.startsWith('wall-')) {
             // Add interior wall
             BuildingSystem.addInteriorWall(itemType, gridX, gridY, edge);
+        } else if (itemType.startsWith('furniture-')) {
+            // Add furniture
+            // Convert string type to enum? Or just use string if BuildingSystem supports it?
+            // BuildingSystem uses FURNITURE enum (integers). I should map them.
+            let furnitureType = BuildingSystem.FURNITURE.NONE;
+            if (itemType === ITEM_TYPES.PEW) furnitureType = BuildingSystem.FURNITURE.PEW;
+            else if (itemType === ITEM_TYPES.PULPIT) furnitureType = BuildingSystem.FURNITURE.PULPIT;
+            else if (itemType === ITEM_TYPES.PIANO) furnitureType = BuildingSystem.FURNITURE.PIANO;
+            else if (itemType === ITEM_TYPES.PLANT) furnitureType = BuildingSystem.FURNITURE.PLANT;
+            
+            if (furnitureType !== BuildingSystem.FURNITURE.NONE) {
+                BuildingSystem.addFurniture(gridX, gridY, furnitureType, currentRotation);
+            }
         }
 
         return { success: true, cost: cost, reason: '' };
@@ -262,6 +308,32 @@
 
         if (!BuildingSystem.isFloor(gridX, gridY)) {
             return { success: false, refund: 0, reason: 'Not a floor tile' };
+        }
+        
+        // Check for furniture demolition first (center click)
+        const furniture = BuildingSystem.getFurniture(gridX, gridY);
+        if (furniture !== null) {
+            // Map FURNITURE enum back to ITEM_TYPES for cost lookup
+            let itemType = null;
+            const F = BuildingSystem.FURNITURE;
+            if (furniture.type === F.PEW) itemType = ITEM_TYPES.PEW;
+            else if (furniture.type === F.PULPIT) itemType = ITEM_TYPES.PULPIT;
+            else if (furniture.type === F.PIANO) itemType = ITEM_TYPES.PIANO;
+            else if (furniture.type === F.PLANT) itemType = ITEM_TYPES.PLANT;
+            
+            if (itemType) {
+                 const refund = getDemolitionRefund(itemType);
+                 BuildingSystem.removeFurniture(gridX, gridY);
+                 
+                 // Refund logic
+                 const State = window.SimChurch?.State;
+                 if (State) {
+                    const state = State.getState();
+                    const newBudget = state.stats.budget + refund;
+                    State.updateState('stats.budget', newBudget);
+                 }
+                 return { success: true, refund: refund, reason: '' };
+            }
         }
 
         if (!edge) {
@@ -372,6 +444,8 @@
         toggleMode,
         isActive,
         selectItem,
+        rotateItem,
+        getRotation,
         getSelectedItem,
         setPreview,
         getPreview,
