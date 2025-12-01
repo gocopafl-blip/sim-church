@@ -13,6 +13,17 @@
     const TILE_WIDTH = 64;
     const TILE_HEIGHT = 32;
 
+    // Depth calculation constants for isometric rendering
+    // Base depth is gridX + gridY (higher values = closer to camera = render later)
+    // We use offsets to ensure proper ordering within the same tile
+    const DEPTH_OFFSETS = {
+        GRASS: -1000,      // Background layer
+        FLOOR: 0,          // Base layer
+        WALL: 0.1,         // Walls render slightly after floor
+        FURNITURE: 0.2,    // Furniture renders after walls on same tile
+        PEOPLE: 0.3        // People render after furniture (future)
+    };
+
     class InteriorScene extends Phaser.Scene {
         constructor() {
             super({ key: 'InteriorScene' });
@@ -121,6 +132,25 @@
         }
 
         /**
+         * Calculate consistent depth value for isometric rendering
+         * @param {number} gridX - Grid X coordinate
+         * @param {number} gridY - Grid Y coordinate
+         * @param {string} layer - Layer type: 'grass', 'floor', 'wall', 'furniture', 'people'
+         * @param {number} additionalOffset - Additional offset for fine-tuning (default 0)
+         * @returns {number} Depth value for Phaser rendering
+         */
+        calculateDepth(gridX, gridY, layer = 'floor', additionalOffset = 0) {
+            // Base depth: gridX + gridY (isometric depth)
+            // Objects with higher sum are closer to camera and should render later
+            const baseDepth = gridX + gridY;
+            
+            // Get layer offset
+            const layerOffset = DEPTH_OFFSETS[layer.toUpperCase()] || DEPTH_OFFSETS.FLOOR;
+            
+            return baseDepth + layerOffset + additionalOffset;
+        }
+
+        /**
          * Render grass only on EMPTY tiles
          */
         renderGrass() {
@@ -154,7 +184,7 @@
             tile.closePath();
             tile.fillPath();
 
-            tile.setDepth(y - 1000);
+            tile.setDepth(this.calculateDepth(gridX, gridY, 'grass'));
             this.grassLayer.add(tile);
         }
 
@@ -193,7 +223,7 @@
             tile.lineStyle(1, 0x5D4E37, 0.3);
             tile.strokePath();
 
-            tile.setDepth(y);
+            tile.setDepth(this.calculateDepth(gridX, gridY, 'floor'));
             this.floorLayer.add(tile);
         }
 
@@ -255,13 +285,13 @@
             if (textureKey && this.textures.exists(textureKey)) {
                 const sprite = this.add.image(x, y, textureKey);
 
-                // Adjust origin if necessary (Kenney's sprites are usually centered at bottom)
-                // Default origin is 0.5, 0.5. 
-                // Isometric sprites often need the "feet" at the tile center.
-                // Let's try adjusting Y anchor to bottom (1.0) or slightly up.
-                sprite.setOrigin(0.5, 0.75); // Trial value, might need tweaking
+                // Set origin to bottom-center (0.5, 1.0) to ensure all furniture items
+                // align their "feet" at the same floor level, regardless of sprite height.
+                // This prevents taller items (like walls) from making shorter items (like pews)
+                // appear to float above the floor when they share the same grid coordinate.
+                sprite.setOrigin(0.5, 1.0);
 
-                sprite.setDepth(gridY + gridX + 1);
+                sprite.setDepth(this.calculateDepth(gridX, gridY, 'furniture'));
                 this.furnitureLayer.add(sprite);
             } else {
                 // Fallback to placeholder graphics if asset not found
@@ -343,7 +373,7 @@
                     graphics.fillRect(x - 5, y - 10, 10, 10);
                 }
 
-                graphics.setDepth(gridY + gridX + 1); // Higher depth than floor
+                graphics.setDepth(this.calculateDepth(gridX, gridY, 'furniture'));
                 this.furnitureLayer.add(graphics);
             }
         }
@@ -368,31 +398,36 @@
                         const iso = this.gridToIso(x, y);
 
                         // Add wall segments for each edge that needs a wall
+                        // Calculate depth using unified system with small offsets based on edge position
                         if (edges & EDGE.NORTH) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'N', feature: features.N, depth: x + y,
+                                edge: 'N', feature: features.N,
+                                depth: this.calculateDepth(x, y, 'wall', 0),
                                 isInterior: BuildingSystem.isInteriorWall(x, y, 'N')
                             });
                         }
                         if (edges & EDGE.SOUTH) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'S', feature: features.S, depth: x + y + 1,
+                                edge: 'S', feature: features.S,
+                                depth: this.calculateDepth(x, y, 'wall', 0.01),
                                 isInterior: BuildingSystem.isInteriorWall(x, y, 'S')
                             });
                         }
                         if (edges & EDGE.EAST) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'E', feature: features.E, depth: x + y + 0.5,
+                                edge: 'E', feature: features.E,
+                                depth: this.calculateDepth(x, y, 'wall', 0.005),
                                 isInterior: BuildingSystem.isInteriorWall(x, y, 'E')
                             });
                         }
                         if (edges & EDGE.WEST) {
                             wallSegments.push({
                                 x: iso.x, y: iso.y, gridX: x, gridY: y,
-                                edge: 'W', feature: features.W, depth: x + y,
+                                edge: 'W', feature: features.W,
+                                depth: this.calculateDepth(x, y, 'wall', 0),
                                 isInterior: BuildingSystem.isInteriorWall(x, y, 'W')
                             });
                         }
@@ -534,7 +569,8 @@
                 }
             }
 
-            wall.setDepth(depth * 100 + 500);
+            // Use the depth value directly (already calculated with unified system)
+            wall.setDepth(depth);
             this.wallLayer.add(wall);
         }
         /**
