@@ -24,14 +24,14 @@
             },
             // Pulpit -> Desk (placeholder)
             pulpit: {
-                base: 'furniture/Isometric/desk',
+                base: 'furniture/pulpit',
                 variants: ['_NE', '_NW', '_SE', '_SW'],
                 extension: '.png',
                 scale: 1
             },
             // Piano -> Bookcase (placeholder)
             piano: {
-                base: 'furniture/Isometric/bookcaseClosed',
+                base: 'furniture/piano',
                 variants: ['_NE', '_NW', '_SE', '_SW'],
                 extension: '.png',
                 scale: 1
