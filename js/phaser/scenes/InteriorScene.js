@@ -36,6 +36,17 @@
             this.previewLayer = null;
         }
 
+        updateGridVisibility(visible) {
+            if (this.gridOverlayLayer) {
+                this.gridOverlayLayer.setVisible(visible);
+            }
+
+            // If turning on, make sure it's rendered
+            if (visible) {
+                this.renderGridOverlay();
+            }
+        }
+
         create() {
             console.log('[InteriorScene] Creating interior view');
 
@@ -79,10 +90,13 @@
             this.renderFurniture(); // Initial furniture render
             this.renderWalls();
 
+            // Initialize grid (hidden by default)
+            this.renderGridOverlay();
+            this.gridOverlayLayer.setVisible(false);
+
             // UI and controls
-            this.createUIOverlay();
+            this.scene.launch('InteriorUIScene', { mainScene: this });
             this.setupCameraControls();
-            this.createTimeDisplay();
 
             // Center camera
             const centerX = (dimensions.width - dimensions.height) * TILE_WIDTH / 4;
@@ -189,7 +203,7 @@
         renderFurniture() {
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             const dimensions = BuildingSystem.getDimensions();
-            
+
             // Clear existing furniture
             this.furnitureLayer.removeAll(true);
 
@@ -210,87 +224,128 @@
         drawFurniture(x, y, gridX, gridY, type, rotation) {
             const BuildingSystem = SimChurch.Phaser.BuildingSystem;
             const F = BuildingSystem.FURNITURE;
-            
-            const graphics = this.add.graphics();
-            
+
+            // Helper to get asset key
+            const getAssetKey = (base, rot) => {
+                const variants = ['_NW', '_NE', '_SE', '_SW'];
+                // Map our rotation (0-3) to these variants
+                // 0=North -> NW, 1=East -> NE, 2=South -> SE, 3=West -> SW
+                // Verify mapping based on Kenney's assets:
+                // _NE is facing Top-Right (East)
+                // _NW is facing Top-Left (North)
+                // _SE is facing Bottom-Right (South)
+                // _SW is facing Bottom-Left (West)
+                return `${base}${variants[rot]}`;
+            };
+
+            let textureKey = null;
+            let fallbackColor = 0x8B4513;
+
             if (type === F.PEW) {
-                // Pew: Long bench
-                graphics.fillStyle(0x8B4513, 1); // Saddle Brown
-                
-                let w = 40;
-                let h = 20;
-                // Swap dimensions if rotated 90 or 270 degrees
-                if (rotation === 1 || rotation === 3) {
-                    w = 20;
-                    h = 40;
-                }
-                
-                const z = 15;
-                // Draw simplified 3D box
-                // Top
-                graphics.beginPath();
-                graphics.moveTo(x - w/2, y - h/2 - z);
-                graphics.lineTo(x + w/2, y - h/2 - z);
-                graphics.lineTo(x + w/2, y + h/2 - z);
-                graphics.lineTo(x - w/2, y + h/2 - z);
-                graphics.closePath();
-                graphics.fillPath();
-                // Front
-                graphics.fillStyle(0x5D3A1A, 1); // Darker brown
-                graphics.beginPath();
-                graphics.moveTo(x - w/2, y + h/2 - z);
-                graphics.lineTo(x + w/2, y + h/2 - z);
-                graphics.lineTo(x + w/2, y + h/2);
-                graphics.lineTo(x - w/2, y + h/2);
-                graphics.closePath();
-                graphics.fillPath();
+                textureKey = getAssetKey('pew', rotation);
             } else if (type === F.PULPIT) {
-                // Pulpit: Tall podium
-                graphics.fillStyle(0x5D3A1A, 1);
-                const w = 20;
-                const h = 20;
-                const z = 30;
-                graphics.fillRect(x - w/2, y - z, w, z); // Front face projection
-                // Top
-                graphics.fillStyle(0x8B4513, 1);
-                graphics.beginPath();
-                graphics.moveTo(x - w/2, y - z - h/2);
-                graphics.lineTo(x + w/2, y - z - h/2);
-                graphics.lineTo(x + w/2, y - z + h/2);
-                graphics.lineTo(x - w/2, y - z + h/2);
-                graphics.closePath();
-                graphics.fillPath();
+                textureKey = getAssetKey('pulpit', rotation);
             } else if (type === F.PIANO) {
-                // Piano: Black
-                graphics.fillStyle(0x111111, 1);
-                let w = 40;
-                let h = 30;
-                if (rotation === 1 || rotation === 3) {
-                    w = 30;
-                    h = 40;
-                }
-                const z = 25;
-                // Top
-                graphics.beginPath();
-                graphics.moveTo(x - w/2, y - z - h/2);
-                graphics.lineTo(x + w/2, y - z - h/2);
-                graphics.lineTo(x + w/2, y - z + h/2);
-                graphics.lineTo(x - w/2, y - z + h/2);
-                graphics.closePath();
-                graphics.fillPath();
-                // Front
-                graphics.fillRect(x - w/2, y - z + h/2, w, z);
+                textureKey = getAssetKey('piano', rotation);
             } else if (type === F.PLANT) {
-                // Plant: Green circle
-                graphics.fillStyle(0x228B22, 1); // Forest Green
-                graphics.fillCircle(x, y - 15, 10);
-                // Pot
-                graphics.fillStyle(0xA0522D, 1); // Sienna
-                graphics.fillRect(x - 5, y - 10, 10, 10);
+                textureKey = getAssetKey('plant', rotation);
             }
 
-            graphics.setDepth(gridY + gridX + 1); // Higher depth than floor
-            this.furnitureLayer.add(graphics);
+            // Check if texture exists
+            if (textureKey && this.textures.exists(textureKey)) {
+                const sprite = this.add.image(x, y, textureKey);
+
+                // Adjust origin if necessary (Kenney's sprites are usually centered at bottom)
+                // Default origin is 0.5, 0.5. 
+                // Isometric sprites often need the "feet" at the tile center.
+                // Let's try adjusting Y anchor to bottom (1.0) or slightly up.
+                sprite.setOrigin(0.5, 0.75); // Trial value, might need tweaking
+
+                sprite.setDepth(gridY + gridX + 1);
+                this.furnitureLayer.add(sprite);
+            } else {
+                // Fallback to placeholder graphics if asset not found
+                const graphics = this.add.graphics();
+
+                if (type === F.PEW) {
+                    // Pew: Long bench
+                    graphics.fillStyle(0x8B4513, 1); // Saddle Brown
+
+                    let w = 40;
+                    let h = 20;
+                    // Swap dimensions if rotated 90 or 270 degrees
+                    if (rotation === 1 || rotation === 3) {
+                        w = 20;
+                        h = 40;
+                    }
+
+                    const z = 15;
+                    // Draw simplified 3D box
+                    // Top
+                    graphics.beginPath();
+                    graphics.moveTo(x - w / 2, y - h / 2 - z);
+                    graphics.lineTo(x + w / 2, y - h / 2 - z);
+                    graphics.lineTo(x + w / 2, y + h / 2 - z);
+                    graphics.lineTo(x - w / 2, y + h / 2 - z);
+                    graphics.closePath();
+                    graphics.fillPath();
+                    // Front
+                    graphics.fillStyle(0x5D3A1A, 1); // Darker brown
+                    graphics.beginPath();
+                    graphics.moveTo(x - w / 2, y + h / 2 - z);
+                    graphics.lineTo(x + w / 2, y + h / 2 - z);
+                    graphics.lineTo(x + w / 2, y + h / 2);
+                    graphics.lineTo(x - w / 2, y + h / 2);
+                    graphics.closePath();
+                    graphics.fillPath();
+                } else if (type === F.PULPIT) {
+                    // Pulpit: Tall podium
+                    graphics.fillStyle(0x5D3A1A, 1);
+                    const w = 20;
+                    const h = 20;
+                    const z = 30;
+                    graphics.fillRect(x - w / 2, y - z, w, z); // Front face projection
+                    // Top
+                    graphics.fillStyle(0x8B4513, 1);
+                    graphics.beginPath();
+                    graphics.moveTo(x - w / 2, y - z - h / 2);
+                    graphics.lineTo(x + w / 2, y - z - h / 2);
+                    graphics.lineTo(x + w / 2, y - z + h / 2);
+                    graphics.lineTo(x - w / 2, y - z + h / 2);
+                    graphics.closePath();
+                    graphics.fillPath();
+                } else if (type === F.PIANO) {
+                    // Piano: Black
+                    graphics.fillStyle(0x111111, 1);
+                    let w = 40;
+                    let h = 30;
+                    if (rotation === 1 || rotation === 3) {
+                        w = 30;
+                        h = 40;
+                    }
+                    const z = 25;
+                    // Top
+                    graphics.beginPath();
+                    graphics.moveTo(x - w / 2, y - z - h / 2);
+                    graphics.lineTo(x + w / 2, y - z - h / 2);
+                    graphics.lineTo(x + w / 2, y - z + h / 2);
+                    graphics.lineTo(x - w / 2, y - z + h / 2);
+                    graphics.closePath();
+                    graphics.fillPath();
+                    // Front
+                    graphics.fillRect(x - w / 2, y - z + h / 2, w, z);
+                } else if (type === F.PLANT) {
+                    // Plant: Green circle
+                    graphics.fillStyle(0x228B22, 1); // Forest Green
+                    graphics.fillCircle(x, y - 15, 10);
+                    // Pot
+                    graphics.fillStyle(0xA0522D, 1); // Sienna
+                    graphics.fillRect(x - 5, y - 10, 10, 10);
+                }
+
+                graphics.setDepth(gridY + gridX + 1); // Higher depth than floor
+                this.furnitureLayer.add(graphics);
+            }
         }
 
         /**
@@ -694,288 +749,24 @@
                 if (ConstructionSystem && ConstructionSystem.isActive()) {
                     const newRotation = ConstructionSystem.rotateItem();
                     console.log(`[InteriorScene] Rotated item to: ${newRotation}`);
-                    
+
                     // Force preview update if hovering
                     const { gridX, gridY, edge } = ConstructionSystem.getPreview();
                     if (gridX !== null && gridY !== null) {
-                         const selectedItem = ConstructionSystem.getSelectedItem();
-                         this.showPreview(gridX, gridY, edge, selectedItem);
+                        const selectedItem = ConstructionSystem.getSelectedItem();
+                        this.showPreview(gridX, gridY, edge, selectedItem);
                     }
                 }
             });
         }
 
-        createUIOverlay() {
-            // Exit button
-            const exitBtn = this.add.graphics();
-            exitBtn.fillStyle(0x722F37, 1);
-            exitBtn.fillRoundedRect(0, 0, 100, 36, 8);
-            exitBtn.setScrollFactor(0);
-            exitBtn.setDepth(9999);
-            exitBtn.setPosition(690, 10);
-
-            const exitText = this.add.text(740, 28, '← Exit', {
-                font: 'bold 14px Arial',
-                fill: '#FFFFFF'
-            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(10000);
-
-            const exitHit = this.add.rectangle(740, 28, 100, 36, 0xffffff, 0)
-                .setScrollFactor(0).setDepth(10001).setInteractive({ useHandCursor: true });
-
-            exitHit.on('pointerover', () => {
-                exitBtn.clear().fillStyle(0x8B3A44, 1).fillRoundedRect(0, 0, 100, 36, 8).setPosition(690, 10);
-            });
-            exitHit.on('pointerout', () => {
-                exitBtn.clear().fillStyle(0x722F37, 1).fillRoundedRect(0, 0, 100, 36, 8).setPosition(690, 10);
-            });
-            exitHit.on('pointerdown', () => {
-                this.cameras.main.fadeOut(500, 0, 0, 0);
-            });
-
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('ExteriorScene');
-            });
-
-            // Build mode button
-            this.buildBtn = this.add.graphics();
-            this.buildBtn.fillStyle(0x2F5233, 1);
-            this.buildBtn.fillRoundedRect(0, 0, 120, 36, 8);
-            this.buildBtn.setScrollFactor(0);
-            this.buildBtn.setDepth(9999);
-            this.buildBtn.setPosition(10, 10);
-
-            this.buildBtnText = this.add.text(70, 28, '🔨 Build', {
-                font: 'bold 14px Arial',
-                fill: '#FFFFFF'
-            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(10000);
-
-            this.buildBtnHit = this.add.rectangle(70, 28, 120, 36, 0xffffff, 0)
-                .setScrollFactor(0).setDepth(10001).setInteractive({ useHandCursor: true });
-
-            this.buildBtnHit.on('pointerdown', () => {
-                const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
-                if (ConstructionSystem) {
-                    const isActive = ConstructionSystem.toggleMode();
-                    this.updateBuildButton(isActive);
-                    this.updateConstructionUI();
-                }
-            });
-
-            // Construction mode indicator
-            this.constructionModeIndicator = this.add.text(10, 50, '', {
-                font: 'bold 12px Arial',
-                fill: '#FFD700',
-                backgroundColor: '#00000080',
-                padding: { x: 8, y: 4 }
-            }).setScrollFactor(0).setDepth(9999).setVisible(false);
-
-            // Construction item selection panel (hidden by default)
-            this.createConstructionPanel();
-
-            // Zoom indicator
-            this.zoomText = this.add.text(400, 480, 'Zoom: 100%', {
-                font: '12px Arial',
-                fill: '#FFFFFF',
-                backgroundColor: '#00000080',
-                padding: { x: 8, y: 4 }
-            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9999);
-        }
-
-        createTimeDisplay() {
-            const TimeSystem = SimChurch.Phaser.TimeSystem;
-            if (!TimeSystem) return;
-
-            const panel = this.add.graphics();
-            panel.fillStyle(0x000000, 0.6);
-            panel.fillRoundedRect(0, 0, 170, 46, 8);
-            panel.setScrollFactor(0);
-            panel.setDepth(9998);
-            panel.setPosition(315, 10);
-
-            this.dayText = this.add.text(325, 20, TimeSystem.getDayName(), {
-                font: 'bold 13px Arial',
-                fill: '#D4AF37'
-            }).setScrollFactor(0).setDepth(9999);
-
-            this.timeText = this.add.text(325, 38, TimeSystem.getTimeString(), {
-                font: '11px Arial',
-                fill: '#FFFFFF'
-            }).setScrollFactor(0).setDepth(9999);
-
-            this.speedText = this.add.text(420, 33, '▶ Normal', {
-                font: '10px Arial',
-                fill: '#88FF88'
-            }).setScrollFactor(0).setDepth(9999);
-        }
-
-        updateBuildButton(isActive) {
-            if (isActive) {
-                this.buildBtn.clear().fillStyle(0x4A7C59, 1).fillRoundedRect(0, 0, 120, 36, 8).setPosition(10, 10);
-                this.buildBtnText.setText('🔨 Building');
-            } else {
-                this.buildBtn.clear().fillStyle(0x2F5233, 1).fillRoundedRect(0, 0, 120, 36, 8).setPosition(10, 10);
-                this.buildBtnText.setText('🔨 Build');
-            }
-        }
-
-        createConstructionPanel() {
-            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
-            if (!ConstructionSystem) return;
-
-            // Panel background
-            this.constructionPanel = this.add.graphics();
-            this.constructionPanel.fillStyle(0x1a1a1a, 0.95);
-            this.constructionPanel.fillRoundedRect(0, 0, 200, 400, 8);
-            this.constructionPanel.setScrollFactor(0);
-            this.constructionPanel.setDepth(9997);
-            this.constructionPanel.setPosition(10, 90);
-            this.constructionPanel.setVisible(false);
-
-            // Panel title
-            this.constructionTitle = this.add.text(110, 110, 'Construction', {
-                font: 'bold 16px Arial',
-                fill: '#D4AF37'
-            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9998).setVisible(false);
-
-            // Item buttons
-            const items = [
-                // Consolidated Smart Wall Button
-                { type: ConstructionSystem.ITEM_TYPES.WALL_SMART, label: 'Wall', cost: 50 },
-                { type: ConstructionSystem.ITEM_TYPES.DOOR_FRAME, label: 'Door', cost: 100 },
-                { type: ConstructionSystem.ITEM_TYPES.WINDOW_FRAME, label: 'Window', cost: 150 },
-                { type: ConstructionSystem.ITEM_TYPES.PEW, label: 'Pew', cost: 100 },
-                { type: ConstructionSystem.ITEM_TYPES.PULPIT, label: 'Pulpit', cost: 200 },
-                { type: ConstructionSystem.ITEM_TYPES.PIANO, label: 'Piano', cost: 800 },
-                { type: ConstructionSystem.ITEM_TYPES.PLANT, label: 'Plant', cost: 50 }
-            ];
-
-            this.constructionButtons = [];
-            items.forEach((item, index) => {
-                const y = 140 + index * 50;
-
-                const btn = this.add.graphics();
-                btn.fillStyle(0x3a3a3a, 1);
-                btn.fillRoundedRect(0, 0, 180, 40, 6);
-                btn.setScrollFactor(0);
-                btn.setDepth(9998);
-                btn.setPosition(20, y);
-                btn.y = y; // Store y position
-                btn.setVisible(false);
-
-                const btnText = this.add.text(110, y + 20, `${item.label}\n$${item.cost}`, {
-                    font: '12px Arial',
-                    fill: '#FFFFFF',
-                    align: 'center'
-                }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9999).setVisible(false);
-
-                const btnHit = this.add.rectangle(110, y + 20, 180, 40, 0xffffff, 0)
-                    .setScrollFactor(0).setDepth(10000).setInteractive({ useHandCursor: true }).setVisible(false);
-
-                btnHit.on('pointerdown', () => {
-                    ConstructionSystem.selectItem(item.type);
-                    this.updateConstructionUI();
-                });
-
-                btnHit.on('pointerover', () => {
-                    btn.clear().fillStyle(0x4a4a4a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, y);
-                });
-
-                btnHit.on('pointerout', () => {
-                    const selected = ConstructionSystem.getSelectedItem();
-                    const btnY = btn.y || y;
-                    if (selected === item.type) {
-                        btn.clear().fillStyle(0x5a7a5a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
-                    } else {
-                        btn.clear().fillStyle(0x3a3a3a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
-                    }
-                });
-
-                this.constructionButtons.push({ btn, btnText, btnHit, item, y });
-            });
-
-            // Demolish button
-            const demolishBtn = this.add.graphics();
-            demolishBtn.fillStyle(0x7a3a3a, 1);
-            demolishBtn.fillRoundedRect(0, 0, 180, 40, 6);
-            demolishBtn.setScrollFactor(0);
-            demolishBtn.setDepth(9998);
-            demolishBtn.setPosition(20, 350);
-            demolishBtn.setVisible(false);
-
-            const demolishText = this.add.text(110, 370, '🗑️ Demolish', {
-                font: 'bold 12px Arial',
-                fill: '#FFFFFF'
-            }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(9999).setVisible(false);
-
-            const demolishHit = this.add.rectangle(110, 370, 180, 40, 0xffffff, 0)
-                .setScrollFactor(0).setDepth(10000).setInteractive({ useHandCursor: true }).setVisible(false);
-
-            demolishHit.on('pointerdown', () => {
-                ConstructionSystem.selectItem('demolish');
-                this.updateConstructionUI();
-            });
-
-            this.demolishButton = { btn: demolishBtn, text: demolishText, hit: demolishHit };
-        }
+        // UI methods removed - handled by InteriorUIScene
 
         updateConstructionUI() {
-            const ConstructionSystem = SimChurch.Phaser.ConstructionSystem;
-            if (!ConstructionSystem) return;
-
-            const isActive = ConstructionSystem.isActive();
-            const selectedItem = ConstructionSystem.getSelectedItem();
-
-            // Show/hide panel
-            this.constructionPanel.setVisible(isActive);
-            this.constructionTitle.setVisible(isActive);
-            this.constructionModeIndicator.setVisible(isActive);
-            this.constructionButtons.forEach(({ btn, btnText, btnHit, item, y }) => {
-                btn.setVisible(isActive);
-                btnText.setVisible(isActive);
-                btnHit.setVisible(isActive);
-
-                // Highlight selected
-                const btnY = btn.y || y;
-                if (isActive && selectedItem === item.type) {
-                    btn.clear().fillStyle(0x5a7a5a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
-                } else if (isActive) {
-                    btn.clear().fillStyle(0x3a3a3a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, btnY);
-                }
-            });
-
-            if (this.demolishButton) {
-                this.demolishButton.btn.setVisible(isActive);
-                this.demolishButton.text.setVisible(isActive);
-                this.demolishButton.hit.setVisible(isActive);
-
-                if (isActive && selectedItem === 'demolish') {
-                    this.demolishButton.btn.clear().fillStyle(0x9a5a5a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, 350);
-                } else if (isActive) {
-                    this.demolishButton.btn.clear().fillStyle(0x7a3a3a, 1).fillRoundedRect(0, 0, 180, 40, 6).setPosition(20, 350);
-                }
-            }
-
-            // Update indicator
-            if (isActive) {
-                if (selectedItem) {
-                    const cost = ConstructionSystem.getCost(selectedItem);
-                    const canAfford = ConstructionSystem.canAfford(selectedItem);
-                    this.constructionModeIndicator.setText(
-                        `Construction Mode\nSelected: ${selectedItem}\nCost: $${cost} ${canAfford ? '✓' : '✗'}`
-                    );
-                    this.constructionModeIndicator.setColor(canAfford ? '#88FF88' : '#FF8888');
-                } else {
-                    this.constructionModeIndicator.setText('Construction Mode\nSelect an item');
-                    this.constructionModeIndicator.setColor('#FFD700');
-                }
-            }
-
-            // Render grid overlay
-            if (isActive) {
-                this.renderGridOverlay();
-            } else {
-                this.clearGridOverlay();
-                this.clearPreview();
+            // Forward to UI scene if running
+            const uiScene = this.scene.get('InteriorUIScene');
+            if (uiScene && uiScene.updateConstructionUI) {
+                uiScene.updateConstructionUI();
             }
         }
 
@@ -986,7 +777,7 @@
             const dimensions = BuildingSystem.getDimensions();
 
             const gridGraphics = this.add.graphics();
-            gridGraphics.lineStyle(1, 0xFFFFFF, 0.3);
+            gridGraphics.lineStyle(1, 0xFFFFFF, 0.15);
 
             for (let y = 0; y < dimensions.height; y++) {
                 for (let x = 0; x < dimensions.width; x++) {
@@ -1222,12 +1013,12 @@
             } else if (itemType.startsWith('furniture-')) {
                 // Preview furniture on center of tile
                 previewGraphics.fillStyle(isValid ? 0x88FF88 : 0xFF8888, 0.5);
-                
+
                 // Determine dimensions based on item type and rotation
                 let w = 30;
                 let h = 30;
                 const rotation = ConstructionSystem.getRotation();
-                
+
                 if (itemType === ConstructionSystem.ITEM_TYPES.PEW) {
                     w = 40; h = 20;
                     if (rotation === 1 || rotation === 3) { w = 20; h = 40; }
@@ -1239,29 +1030,29 @@
                 } else if (itemType === ConstructionSystem.ITEM_TYPES.PLANT) {
                     w = 20; h = 20;
                 }
-                
+
                 // Draw rotated rectangle on the tile (isometric projection approximately)
                 // For true iso, we'd need to project the corners, but simple box is okay for preview
                 previewGraphics.beginPath();
-                previewGraphics.moveTo(iso.x - w/2, iso.y - h/2);
-                previewGraphics.lineTo(iso.x + w/2, iso.y - h/2);
-                previewGraphics.lineTo(iso.x + w/2, iso.y + h/2);
-                previewGraphics.lineTo(iso.x - w/2, iso.y + h/2);
+                previewGraphics.moveTo(iso.x - w / 2, iso.y - h / 2);
+                previewGraphics.lineTo(iso.x + w / 2, iso.y - h / 2);
+                previewGraphics.lineTo(iso.x + w / 2, iso.y + h / 2);
+                previewGraphics.lineTo(iso.x - w / 2, iso.y + h / 2);
                 previewGraphics.closePath();
                 previewGraphics.fillPath();
-                
+
                 // Draw outline
                 previewGraphics.lineStyle(2, isValid ? 0x88FF88 : 0xFF8888, 0.8);
                 previewGraphics.strokePath();
-                
+
                 // Draw direction arrow (simple line)
                 previewGraphics.beginPath();
                 previewGraphics.moveTo(iso.x, iso.y);
                 let dx = 0, dy = 0;
-                if (rotation === 0) dx = w/2;
-                else if (rotation === 1) dy = h/2;
-                else if (rotation === 2) dx = -w/2;
-                else if (rotation === 3) dy = -h/2;
+                if (rotation === 0) dx = w / 2;
+                else if (rotation === 1) dy = h / 2;
+                else if (rotation === 2) dx = -w / 2;
+                else if (rotation === 3) dy = -h / 2;
                 previewGraphics.lineTo(iso.x + dx, iso.y + dy);
                 previewGraphics.strokePath();
             }

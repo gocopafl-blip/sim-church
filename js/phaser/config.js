@@ -29,7 +29,8 @@
             scene: [
                 SimChurch.Phaser.BootScene,
                 SimChurch.Phaser.ExteriorScene,
-                SimChurch.Phaser.InteriorScene
+                SimChurch.Phaser.InteriorScene,
+                SimChurch.Phaser.InteriorUIScene
             ],
             physics: {
                 default: 'arcade',

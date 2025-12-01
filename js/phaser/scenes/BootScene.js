@@ -46,6 +46,28 @@
                 loadingText.destroy();
             });
 
+            // === LOAD ASSETS ===
+            // Load actual sprite assets using the config
+            if (SimChurch.Phaser.Assets) {
+                const assets = SimChurch.Phaser.Assets;
+                const basePath = assets.basePath;
+
+                // Load Furniture
+                if (assets.furniture) {
+                    Object.entries(assets.furniture).forEach(([key, config]) => {
+                        // Load each variant
+                        config.variants.forEach(variant => {
+                            const path = `${basePath}${config.base}${variant}${config.extension}`;
+                            const textureKey = `${key}${variant}`;
+                            this.load.image(textureKey, path);
+                            console.log(`[BootScene] Queued asset: ${textureKey} -> ${path}`);
+                        });
+                    });
+                }
+            } else {
+                console.warn('[BootScene] Asset config not found, skipping asset load');
+            }
+
             // === LOAD PLACEHOLDER ASSETS ===
             // We'll create these programmatically for now
             // Later these will be replaced with actual isometric sprites

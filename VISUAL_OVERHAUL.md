@@ -656,5 +656,28 @@ assets/
 
 ---
 
-*Document maintained alongside development. Update after each session.*
+### Session 4 — November 30, 2025 (Phase 3 & 4 Implementation)
+
+**Completed Phase 3 (Construction Mode):**
+- ✅ Created `js/phaser/systems/ConstructionSystem.js`
+- ✅ Implemented "Thin Wall" rendering (walls on tile edges, Theme Hospital style)
+- ✅ Smart Wall placement logic (auto-orientation N/S or E/W based on quadrant)
+- ✅ Construction Mode UI (Build button, cost display, placement validation)
+- ✅ Save/Load building persistence
+- ✅ Skipped Stairwells per user request
+
+**Completed Phase 4 (Furniture & Objects):**
+- ✅ Implemented Furniture System (Pews, Pulpit, Piano, Plants)
+- ✅ Added Asset Management (`js/phaser/config/Assets.js`)
+- ✅ Integrated Kenney's Isometric Asset Pack (replacing colored boxes)
+- ✅ Implemented 4-direction rotation (R key) with sprite swapping (_NE, _NW, _SE, _SW)
+- ✅ Persistent furniture data
+
+**Files Created:**
+- `js/phaser/systems/ConstructionSystem.js`
+- `js/phaser/config/Assets.js`
+
+**Next Steps:**
+- Begin Phase 5: Player Character
+
 
